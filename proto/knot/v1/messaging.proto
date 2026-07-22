@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package knot.v1;
+
+option go_package = "github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1;knotv1";
+
+service RouterService {
+  rpc AuthorizeConnection(AuthorizeConnectionRequest) returns (AuthorizeConnectionResponse);
+  rpc RouteMessage(RouteMessageRequest) returns (RouteMessageResponse);
+}
+
+service DeliveryService {
+  rpc Enqueue(EnqueueRequest) returns (EnqueueResponse);
+  rpc Sync(SyncRequest) returns (SyncResponse);
+  rpc Acknowledge(AcknowledgeRequest) returns (AcknowledgeResponse);
+}
+
+message AuthorizeConnectionRequest {
+  string user_id = 1;
+  string device_id = 2;
+}
+
+message AuthorizeConnectionResponse {
+  bool active = 1;
+}
+
+message DeviceEnvelope {
+  string recipient_device_id = 1;
+  bytes ciphertext = 2;
+}
+
+message RouteMessageRequest {
+  string message_id = 1;
+  string sender_user_id = 2;
+  string sender_device_id = 3;
+  string recipient_user_id = 4;
+  repeated DeviceEnvelope envelopes = 5;
+  string group_id = 6;
+  uint64 group_revision = 7;
+}
+
+enum RouteKind {
+  ROUTE_KIND_UNSPECIFIED = 0;
+  ROUTE_KIND_LIVE = 1;
+  ROUTE_KIND_QUEUED = 2;
+}
+
+message DeviceRoute {
+  string recipient_device_id = 1;
+  RouteKind kind = 2;
+}
+
+message RouteMessageResponse {
+  string message_id = 1;
+  bool duplicate = 2;
+  repeated DeviceRoute routes = 3;
+}
+
+message DeliveryEnvelope {
+  string message_id = 1;
+  string recipient_user_id = 2;
+  string recipient_device_id = 3;
+  string sender_user_id = 4;
+  string sender_device_id = 5;
+  bytes ciphertext = 6;
+  int64 created_at_unix_millis = 7;
+  string sender_username = 8;
+  string group_id = 9;
+  uint64 group_revision = 10;
+}
+
+message EnqueueRequest {
+  DeliveryEnvelope envelope = 1;
+}
+
+message EnqueueResponse {
+  bool duplicate = 1;
+  uint64 sequence = 2;
+}
+
+message SyncRequest {
+  string user_id = 1;
+  string device_id = 2;
+  string cursor = 3;
+  uint32 limit = 4;
+}
+
+message SyncedEnvelope {
+  DeliveryEnvelope envelope = 1;
+  string cursor = 2;
+  string ack_token = 3;
+  bool redelivered = 4;
+}
+
+message SyncResponse {
+  repeated SyncedEnvelope messages = 1;
+  string next_cursor = 2;
+}
+
+message Acknowledgement {
+  string message_id = 1;
+  string ack_token = 2;
+}
+
+message AcknowledgeRequest {
+  string user_id = 1;
+  string device_id = 2;
+  repeated Acknowledgement acknowledgements = 3;
+}
+
+message AcknowledgeResponse {
+  uint32 acknowledged = 1;
+}
