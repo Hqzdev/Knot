@@ -1,0 +1,34 @@
+{
+  "name": "knot-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "crypto:build": "node scripts/build-crypto.mjs",
+    "dev": "npm run crypto:build && vite",
+    "build": "npm run crypto:build && tsc -b && vite build",
+    "build:web": "tsc -b && vite build",
+    "check": "npm run typecheck && npm test && npm run test:wasm && npm run build:web",
+    "test:e2e": "playwright test",
+    "test:wasm": "npm run crypto:build && node scripts/test-crypto.mjs",
+    "typecheck": "tsc -b",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^24.10.1",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "fake-indexeddb": "^6.2.5",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
+  }
+}

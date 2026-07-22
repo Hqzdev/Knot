@@ -1,0 +1,313 @@
+x-service-environment: &service-environment
+  KNOT_JWT_SECRET: ${KNOT_JWT_SECRET:-development-only-jwt-secret-change-before-deploying}
+  KNOT_CORS_ORIGINS: ${KNOT_CORS_ORIGINS:-http://127.0.0.1:5173,http://localhost:5173}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${KNOT_OTEL_EXPORTER_ENDPOINT:-http://otel-collector:4317}
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+  OTEL_TRACES_EXPORTER: otlp
+
+x-service-logging: &service-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-service-restart: &service-restart unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: knot
+      POSTGRES_PASSWORD: ${KNOT_POSTGRES_PASSWORD:-knot-development-password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U knot -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - knot-postgres:/var/lib/postgresql/data
+      - ./deploy/postgres/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    restart: *service-restart
+    logging: *service-logging
+
+  postgres-bootstrap:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${KNOT_POSTGRES_PASSWORD:-knot-development-password}
+    entrypoint: ["/bin/sh", "/bootstrap.sh"]
+    volumes:
+      - ./deploy/postgres/bootstrap.sh:/bootstrap.sh:ro
+    restart: "no"
+    logging: *service-logging
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: *service-restart
+    logging: *service-logging
+
+  nats:
+    image: nats:2.14-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:8222:8222"
+    volumes:
+      - knot-nats:/data
+    restart: *service-restart
+    logging: *service-logging
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${KNOT_MINIO_ROOT_USER:-knot-development-access}
+      MINIO_ROOT_PASSWORD: ${KNOT_MINIO_ROOT_PASSWORD:-knot-development-secret-change-before-deploying}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${KNOT_CORS_ORIGINS:-http://127.0.0.1:5173,http://localhost:5173}
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:9000:9000"
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:9001:9001"
+    volumes:
+      - knot-minio:/data
+    restart: *service-restart
+    logging: *service-logging
+
+  minio-bootstrap:
+    image: minio/mc:RELEASE.2025-03-12T17-29-24Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      KNOT_MINIO_ROOT_USER: ${KNOT_MINIO_ROOT_USER:-knot-development-access}
+      KNOT_MINIO_ROOT_PASSWORD: ${KNOT_MINIO_ROOT_PASSWORD:-knot-development-secret-change-before-deploying}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 "$${KNOT_MINIO_ROOT_USER}" "$${KNOT_MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing local/knot-attachments &&
+        mc anonymous set none local/knot-attachments
+    restart: "no"
+    logging: *service-logging
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.153.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:4317:4317"
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:4318:4318"
+    restart: *service-restart
+    logging: *service-logging
+
+  push:
+    build:
+      context: .
+      dockerfile: services/push/Dockerfile
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      <<: *service-environment
+      KNOT_PUSH_ADDRESS: :8083
+      KNOT_DATABASE_URL: postgres://knot:${KNOT_POSTGRES_PASSWORD:-knot-development-password}@postgres:5432/knot_push?sslmode=disable
+      KNOT_PUSH_INTERNAL_TOKEN: ${KNOT_PUSH_INTERNAL_TOKEN:-development-only-push-token-change-before-deploying}
+      KNOT_PUSH_PROVIDER_MODE: ${KNOT_PUSH_PROVIDER_MODE:-disabled}
+      KNOT_PUSH_PROVIDER_TIMEOUT: ${KNOT_PUSH_PROVIDER_TIMEOUT:-8s}
+      KNOT_APNS_KEY_ID: ${KNOT_APNS_KEY_ID:-}
+      KNOT_APNS_TEAM_ID: ${KNOT_APNS_TEAM_ID:-}
+      KNOT_APNS_TOPIC: ${KNOT_APNS_TOPIC:-}
+      KNOT_APNS_ENVIRONMENT: ${KNOT_APNS_ENVIRONMENT:-production}
+      KNOT_APNS_PRIVATE_KEY_FILE: ${KNOT_APNS_PRIVATE_KEY_FILE:-}
+      KNOT_WEB_PUSH_VAPID_PUBLIC_KEY: ${KNOT_WEB_PUSH_VAPID_PUBLIC_KEY:-}
+      KNOT_WEB_PUSH_VAPID_PRIVATE_KEY: ${KNOT_WEB_PUSH_VAPID_PRIVATE_KEY:-}
+      KNOT_WEB_PUSH_SUBJECT: ${KNOT_WEB_PUSH_SUBJECT:-}
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:8083:8083"
+    restart: *service-restart
+    logging: *service-logging
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      push:
+        condition: service_started
+    environment:
+      <<: *service-environment
+      KNOT_API_ADDRESS: :8080
+      KNOT_DATABASE_URL: postgres://knot:${KNOT_POSTGRES_PASSWORD:-knot-development-password}@postgres:5432/knot_identity?sslmode=disable
+      KNOT_REDIS_URL: redis://redis:6379/0
+      KNOT_PUSH_INTERNAL_URL: http://push:8083
+      KNOT_PUSH_INTERNAL_TOKEN: ${KNOT_PUSH_INTERNAL_TOKEN:-development-only-push-token-change-before-deploying}
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:8080:8080"
+    restart: *service-restart
+    logging: *service-logging
+
+  presence:
+    build:
+      context: .
+      dockerfile: services/presence/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *service-environment
+      KNOT_PRESENCE_ADDRESS: :8081
+      KNOT_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:8081:8081"
+    restart: *service-restart
+    logging: *service-logging
+
+  attachments:
+    build:
+      context: .
+      dockerfile: services/attachments/Dockerfile
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      minio-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      <<: *service-environment
+      KNOT_ATTACHMENTS_ADDRESS: :8082
+      KNOT_ATTACHMENTS_STORE: postgres
+      KNOT_ATTACHMENTS_DATABASE_URL: postgres://knot:${KNOT_POSTGRES_PASSWORD:-knot-development-password}@postgres:5432/knot_attachments?sslmode=disable
+      KNOT_S3_ENDPOINT: http://minio:9000
+      KNOT_S3_PUBLIC_ENDPOINT: ${KNOT_S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      KNOT_S3_REGION: us-east-1
+      KNOT_S3_BUCKET: knot-attachments
+      KNOT_S3_ACCESS_KEY_ID: ${KNOT_MINIO_ROOT_USER:-knot-development-access}
+      KNOT_S3_SECRET_ACCESS_KEY: ${KNOT_MINIO_ROOT_PASSWORD:-knot-development-secret-change-before-deploying}
+      KNOT_S3_PATH_STYLE: "true"
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:8082:8082"
+    restart: *service-restart
+    logging: *service-logging
+
+  delivery:
+    build:
+      context: .
+      dockerfile: services/delivery/Dockerfile
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+    environment:
+      <<: *service-environment
+      KNOT_DELIVERY_GRPC_ADDRESS: :9092
+      KNOT_DELIVERY_HEALTH_ADDRESS: :8085
+      KNOT_DELIVERY_DATABASE_URL: postgres://knot:${KNOT_POSTGRES_PASSWORD:-knot-development-password}@postgres:5432/knot_delivery?sslmode=disable
+      KNOT_NATS_URL: nats://nats:4222
+      KNOT_NATS_REPLICAS: "1"
+      KNOT_INTERNAL_GRPC_TOKEN: ${KNOT_INTERNAL_GRPC_TOKEN:-development-only-grpc-token-change-before-deploying}
+      KNOT_DELIVERY_TOKEN_SECRET: ${KNOT_DELIVERY_TOKEN_SECRET:-development-only-delivery-token-change-before-deploying}
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:8085:8085"
+    restart: *service-restart
+    logging: *service-logging
+
+  router:
+    build:
+      context: .
+      dockerfile: services/router/Dockerfile
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      delivery:
+        condition: service_started
+      push:
+        condition: service_started
+    environment:
+      <<: *service-environment
+      KNOT_ROUTER_GRPC_ADDRESS: :9091
+      KNOT_ROUTER_HEALTH_ADDRESS: :8084
+      KNOT_DATABASE_URL: postgres://knot:${KNOT_POSTGRES_PASSWORD:-knot-development-password}@postgres:5432/knot_identity?sslmode=disable
+      KNOT_REDIS_URL: redis://redis:6379/0
+      KNOT_DELIVERY_GRPC_TARGET: delivery:9092
+      KNOT_PUSH_URL: http://push:8083
+      KNOT_PUSH_INTERNAL_TOKEN: ${KNOT_PUSH_INTERNAL_TOKEN:-development-only-push-token-change-before-deploying}
+      KNOT_INTERNAL_GRPC_TOKEN: ${KNOT_INTERNAL_GRPC_TOKEN:-development-only-grpc-token-change-before-deploying}
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:8084:8084"
+    restart: *service-restart
+    logging: *service-logging
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+      router:
+        condition: service_started
+      delivery:
+        condition: service_started
+    environment:
+      <<: *service-environment
+      KNOT_GATEWAY_ADDRESS: :8086
+      KNOT_GATEWAY_SHARD: gateway-1
+      KNOT_REDIS_URL: redis://redis:6379/0
+      KNOT_ROUTER_GRPC_TARGET: router:9091
+      KNOT_DELIVERY_GRPC_TARGET: delivery:9092
+      KNOT_INTERNAL_GRPC_TOKEN: ${KNOT_INTERNAL_GRPC_TOKEN:-development-only-grpc-token-change-before-deploying}
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:8086:8086"
+    restart: *service-restart
+    logging: *service-logging
+
+  web:
+    build:
+      context: .
+      dockerfile: clients/web/Dockerfile
+    depends_on:
+      - api
+      - gateway
+      - presence
+      - attachments
+      - push
+    environment:
+      KNOT_API_UPSTREAM: http://api:8080
+      KNOT_GATEWAY_UPSTREAM: http://gateway:8086
+      KNOT_PRESENCE_UPSTREAM: http://presence:8081
+      KNOT_ATTACHMENTS_UPSTREAM: http://attachments:8082
+      KNOT_PUSH_UPSTREAM: http://push:8083
+      KNOT_OBJECTS_ORIGIN: ${KNOT_OBJECTS_ORIGIN:-http://localhost:9000 http://127.0.0.1:9000}
+    ports:
+      - "${KNOT_BIND_ADDRESS:-0.0.0.0}:5173:8080"
+    restart: *service-restart
+    logging: *service-logging
+
+volumes:
+  knot-postgres:
+  knot-nats:
+  knot-minio:
