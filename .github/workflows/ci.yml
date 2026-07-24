@@ -34,7 +34,7 @@ jobs:
       KNOT_TEST_ATTACHMENTS_DATABASE_URL: postgres://knot:knot@127.0.0.1:5432/knot_attachments_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
