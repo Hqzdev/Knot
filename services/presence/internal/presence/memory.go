@@ -2,54 +2,53 @@ package presence
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 )
 
 type MemoryStore struct {
-	mutex         sync.Mutex
-	now           func() time.Time
-	devices       map[string]map[string]time.Time
-	subscriptions map[string]map[uint64]chan TypingEvent
-	nextID        uint64
-	closed        bool
+	mutex    sync.Mutex
+	now      func() time.Time
+	online   map[string]entry
+	watchers map[string]map[string]Viewer
+	drafts   map[string]Draft
+	queue    []Identity
 }
 
-type memorySubscription struct {
-	store  *MemoryStore
-	userID string
-	id     uint64
-	events chan TypingEvent
-	once   sync.Once
+type entry struct {
+	identity  Identity
+	expiresAt time.Time
 }
 
 func NewMemoryStore() *MemoryStore {
-	return newMemoryStore(time.Now)
-}
-
-func newMemoryStore(now func() time.Time) *MemoryStore {
 	return &MemoryStore{
-		now:           now,
-		devices:       make(map[string]map[string]time.Time),
-		subscriptions: make(map[string]map[uint64]chan TypingEvent),
+		now: time.Now, online: make(map[string]entry), watchers: make(map[string]map[string]Viewer), drafts: make(map[string]Draft),
 	}
 }
 
-func (store *MemoryStore) Heartbeat(ctx context.Context, userID string, deviceID string, ttl time.Duration) error {
+func (store *MemoryStore) Heartbeat(ctx context.Context, identity Identity, ttl time.Duration) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	store.mutex.Lock()
 	defer store.mutex.Unlock()
-	if store.closed {
-		return context.Canceled
+	store.online[identity.SessionID] = entry{identity: identity, expiresAt: store.now().UTC().Add(ttl)}
+	return nil
+}
+
+func (store *MemoryStore) Disconnect(ctx context.Context, identity Identity) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	devices := store.devices[userID]
-	if devices == nil {
-		devices = make(map[string]time.Time)
-		store.devices[userID] = devices
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	delete(store.online, identity.SessionID)
+	delete(store.drafts, identity.SessionID)
+	store.removeQueued(identity.SessionID)
+	for _, values := range store.watchers {
+		delete(values, identity.SessionID)
 	}
-	devices[deviceID] = store.now().Add(ttl)
 	return nil
 }
 
@@ -59,115 +58,118 @@ func (store *MemoryStore) Online(ctx context.Context, userIDs []string) (map[str
 	}
 	store.mutex.Lock()
 	defer store.mutex.Unlock()
-	if store.closed {
-		return nil, context.Canceled
-	}
-	now := store.now()
-	result := make(map[string]bool, len(userIDs))
+	store.purge()
+	values := make(map[string]bool, len(userIDs))
 	for _, userID := range userIDs {
-		devices := store.devices[userID]
-		for deviceID, expiresAt := range devices {
-			if !expiresAt.After(now) {
-				delete(devices, deviceID)
-				continue
+		for _, current := range store.online {
+			if current.identity.UserID == userID {
+				values[userID] = true
+				break
 			}
-			result[userID] = true
-		}
-		if len(devices) == 0 {
-			delete(store.devices, userID)
 		}
 	}
-	return result, nil
+	return values, nil
 }
 
-func (store *MemoryStore) PublishTyping(ctx context.Context, event TypingEvent) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	store.mutex.Lock()
-	defer store.mutex.Unlock()
-	if store.closed {
-		return context.Canceled
-	}
-	for _, events := range store.subscriptions[event.RecipientUserID] {
-		select {
-		case events <- event:
-		default:
-		}
-	}
-	return nil
-}
-
-func (store *MemoryStore) SubscribeTyping(ctx context.Context, userID string) (Subscription, error) {
+func (store *MemoryStore) Watch(ctx context.Context, identity Identity, conversationID string, ttl time.Duration) ([]Viewer, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	store.mutex.Lock()
 	defer store.mutex.Unlock()
-	if store.closed {
-		return nil, context.Canceled
+	if store.watchers[conversationID] == nil {
+		store.watchers[conversationID] = make(map[string]Viewer)
 	}
-	store.nextID++
-	events := make(chan TypingEvent, 64)
-	subscriptions := store.subscriptions[userID]
-	if subscriptions == nil {
-		subscriptions = make(map[uint64]chan TypingEvent)
-		store.subscriptions[userID] = subscriptions
-	}
-	subscriptions[store.nextID] = events
-	return &memorySubscription{store: store, userID: userID, id: store.nextID, events: events}, nil
+	store.watchers[conversationID][identity.SessionID] = Viewer{Identity: identity, ConversationID: conversationID, ExpiresAt: store.now().UTC().Add(ttl)}
+	return store.viewers(conversationID), nil
 }
 
-func (store *MemoryStore) Ping(ctx context.Context) error {
+func (store *MemoryStore) Unwatch(ctx context.Context, identity Identity, conversationID string) ([]Viewer, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	delete(store.watchers[conversationID], identity.SessionID)
+	return store.viewers(conversationID), nil
+}
+
+func (store *MemoryStore) PublishDraft(ctx context.Context, identity Identity, conversationID string, text string, ttl time.Duration) (Draft, error) {
+	if err := ctx.Err(); err != nil {
+		return Draft{}, err
+	}
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	value := Draft{Identity: identity, ConversationID: conversationID, Text: text, ExpiresAt: store.now().UTC().Add(ttl)}
+	store.drafts[identity.SessionID] = value
+	return value, nil
+}
+
+func (store *MemoryStore) JoinRoulette(ctx context.Context, identity Identity, ttl time.Duration) (*Match, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	store.removeQueued(identity.SessionID)
+	for index, candidate := range store.queue {
+		if candidate.UserID == identity.UserID {
+			continue
+		}
+		store.queue = append(store.queue[:index], store.queue[index+1:]...)
+		return &Match{Left: candidate, Right: identity}, nil
+	}
+	store.queue = append(store.queue, identity)
+	return nil, nil
+}
+
+func (store *MemoryStore) LeaveRoulette(ctx context.Context, identity Identity) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	store.mutex.Lock()
 	defer store.mutex.Unlock()
-	if store.closed {
-		return context.Canceled
-	}
+	store.removeQueued(identity.SessionID)
 	return nil
 }
 
-func (store *MemoryStore) Close() error {
-	store.mutex.Lock()
-	defer store.mutex.Unlock()
-	if store.closed {
-		return nil
-	}
-	store.closed = true
-	for _, subscriptions := range store.subscriptions {
-		for _, events := range subscriptions {
-			close(events)
-		}
-	}
-	store.subscriptions = make(map[string]map[uint64]chan TypingEvent)
-	return nil
+func (store *MemoryStore) Ping(ctx context.Context) error {
+	return ctx.Err()
 }
 
-func (subscription *memorySubscription) Events() <-chan TypingEvent {
-	return subscription.events
+func (store *MemoryStore) viewers(conversationID string) []Viewer {
+	now := store.now().UTC()
+	values := make([]Viewer, 0)
+	for sessionID, viewer := range store.watchers[conversationID] {
+		if viewer.ExpiresAt.After(now) {
+			values = append(values, viewer)
+		} else {
+			delete(store.watchers[conversationID], sessionID)
+		}
+	}
+	sort.Slice(values, func(left int, right int) bool { return values[left].Username < values[right].Username })
+	return values
 }
 
-func (subscription *memorySubscription) Close() error {
-	subscription.once.Do(func() {
-		subscription.store.mutex.Lock()
-		defer subscription.store.mutex.Unlock()
-		if subscription.store.closed {
-			return
+func (store *MemoryStore) purge() {
+	now := store.now().UTC()
+	for sessionID, value := range store.online {
+		if !value.expiresAt.After(now) {
+			delete(store.online, sessionID)
 		}
-		subscriptions := subscription.store.subscriptions[subscription.userID]
-		if subscriptions == nil {
-			return
+	}
+	for sessionID, value := range store.drafts {
+		if !value.ExpiresAt.After(now) {
+			delete(store.drafts, sessionID)
 		}
-		if events, exists := subscriptions[subscription.id]; exists {
-			delete(subscriptions, subscription.id)
-			close(events)
+	}
+}
+
+func (store *MemoryStore) removeQueued(sessionID string) {
+	for index := 0; index < len(store.queue); index++ {
+		if store.queue[index].SessionID == sessionID {
+			store.queue = append(store.queue[:index], store.queue[index+1:]...)
+			index--
 		}
-		if len(subscriptions) == 0 {
-			delete(subscription.store.subscriptions, subscription.userID)
-		}
-	})
-	return nil
+	}
 }

@@ -7,17 +7,12 @@ server {
     listen 8080;
     listen [::]:8080;
     server_name _;
-    server_tokens off;
-    root /usr/share/nginx/html;
-    index index.html;
-    client_max_body_size 20m;
-
-    include /tmp/knot-security.conf;
+    client_max_body_size 120m;
 
     location = /healthz {
         access_log off;
         default_type text/plain;
-        return 200 "ok\n";
+        return 200 "open\n";
     }
 
     location /api/ {
@@ -40,29 +35,13 @@ server {
         include /etc/nginx/snippets/knot-proxy.conf;
     }
 
-    location /push/ {
-        proxy_pass ${KNOT_PUSH_UPSTREAM}/;
+    location /preview/ {
+        proxy_pass ${KNOT_PREVIEW_UPSTREAM}/;
         include /etc/nginx/snippets/knot-proxy.conf;
     }
 
-    location /assets/ {
-        try_files $uri =404;
-        include /tmp/knot-security.conf;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-    }
-
-    location /crypto/ {
-        try_files $uri =404;
-        include /tmp/knot-security.conf;
-        add_header Cache-Control "no-cache";
-    }
-
-    location = /index.html {
-        include /tmp/knot-security.conf;
-        add_header Cache-Control "no-store";
-    }
-
     location / {
-        try_files $uri $uri/ /index.html;
+        proxy_pass ${KNOT_WEB_UPSTREAM};
+        include /etc/nginx/snippets/knot-proxy.conf;
     }
 }

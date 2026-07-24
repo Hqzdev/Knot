@@ -9,9 +9,13 @@ COPY proto ./proto
 COPY services/gateway ./services/gateway
 COPY services/shared ./services/shared
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/knot-gateway ./services/gateway/cmd/knot-gateway
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/knot-healthcheck ./services/shared/healthcheck
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=build /out/knot-gateway /knot-gateway
+COPY --from=build /out/knot-healthcheck /knot-healthcheck
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 CMD ["/knot-healthcheck", "http://127.0.0.1:8086/ready"]
 
 ENTRYPOINT ["/knot-gateway"]

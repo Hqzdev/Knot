@@ -1,12 +1,14 @@
 package objectstore
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -24,6 +26,7 @@ const (
 	unsignedPayload  = "UNSIGNED-PAYLOAD"
 	emptyPayloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	maxPresignTTL    = 7 * 24 * time.Hour
+	maxMediaSize     = 5 << 20
 )
 
 type S3Config struct {
@@ -98,16 +101,16 @@ func newS3Store(config S3Config, now func() time.Time) (*S3Store, error) {
 	}, nil
 }
 
-func (store *S3Store) PresignUpload(ctx context.Context, objectKey string, size int64, ciphertextSHA256 string, ttl time.Duration) (SignedRequest, error) {
+func (store *S3Store) PresignUpload(ctx context.Context, objectKey string, size int64, fileSHA256 string, ttl time.Duration) (SignedRequest, error) {
 	if err := ctx.Err(); err != nil {
 		return SignedRequest{}, err
 	}
-	if size <= 0 || !validSHA256(ciphertextSHA256) {
+	if size <= 0 || !validSHA256(fileSHA256) {
 		return SignedRequest{}, errors.New("invalid upload parameters")
 	}
 	headers := map[string]string{
 		"content-length":    strconv.FormatInt(size, 10),
-		"x-amz-meta-sha256": ciphertextSHA256,
+		"x-amz-meta-sha256": fileSHA256,
 	}
 	return store.presign(http.MethodPut, objectKey, headers, ttl)
 }
@@ -135,7 +138,52 @@ func (store *S3Store) Head(ctx context.Context, objectKey string) (ObjectInfo, e
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return ObjectInfo{}, fmt.Errorf("S3 HEAD returned status %d", response.StatusCode)
 	}
-	return ObjectInfo{Size: response.ContentLength, CiphertextSHA256: strings.ToLower(response.Header.Get("X-Amz-Meta-Sha256"))}, nil
+	return ObjectInfo{Size: response.ContentLength, SHA256: strings.ToLower(response.Header.Get("X-Amz-Meta-Sha256"))}, nil
+}
+
+func (store *S3Store) Put(ctx context.Context, objectKey string, mediaType string, data []byte) error {
+	if len(data) == 0 || len(data) > maxMediaSize || mediaType == "" {
+		return errors.New("invalid media object")
+	}
+	request, err := store.signedPayloadRequest(ctx, http.MethodPut, objectKey, mediaType, data)
+	if err != nil {
+		return err
+	}
+	response, err := store.client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("S3 PUT returned status %d", response.StatusCode)
+	}
+	return nil
+}
+
+func (store *S3Store) Get(ctx context.Context, objectKey string) (MediaObject, error) {
+	request, err := store.signedRequest(ctx, http.MethodGet, objectKey, false)
+	if err != nil {
+		return MediaObject{}, err
+	}
+	response, err := store.client.Do(request)
+	if err != nil {
+		return MediaObject{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return MediaObject{}, ErrObjectNotFound
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return MediaObject{}, fmt.Errorf("S3 GET returned status %d", response.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, maxMediaSize+1))
+	if err != nil {
+		return MediaObject{}, err
+	}
+	if len(data) == 0 || len(data) > maxMediaSize {
+		return MediaObject{}, errors.New("invalid media object")
+	}
+	return MediaObject{Data: data, MediaType: response.Header.Get("Content-Type")}, nil
 }
 
 func (store *S3Store) Delete(ctx context.Context, objectKey string) error {
@@ -231,6 +279,44 @@ func (store *S3Store) signedRequest(ctx context.Context, method string, objectKe
 	}
 	signedHeaders, canonicalHeaderBlock := canonicalizeHeaders(canonicalHeaders)
 	canonicalRequest := strings.Join([]string{method, canonicalURI, "", canonicalHeaderBlock, signedHeaders, emptyPayloadHash}, "\n")
+	scope := date + "/" + store.region + "/" + serviceName + "/" + requestType
+	stringToSign := strings.Join([]string{algorithm, timestamp, scope, sha256Hex(canonicalRequest)}, "\n")
+	signature := hex.EncodeToString(hmacSHA256(store.signingKey(date), stringToSign))
+	request.Header.Set("Authorization", algorithm+" Credential="+store.accessKeyID+"/"+scope+", SignedHeaders="+signedHeaders+", Signature="+signature)
+	return request, nil
+}
+
+func (store *S3Store) signedPayloadRequest(ctx context.Context, method string, objectKey string, mediaType string, payload []byte) (*http.Request, error) {
+	if !validObjectKey(objectKey) {
+		return nil, errors.New("invalid object key")
+	}
+	requestURL, canonicalURI, host := store.resource(store.endpoint, objectKey, false)
+	request, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	now := store.now().UTC()
+	timestamp := now.Format("20060102T150405Z")
+	date := now.Format("20060102")
+	payloadDigest := sha256.Sum256(payload)
+	payloadHash := hex.EncodeToString(payloadDigest[:])
+	request.Host = host
+	request.ContentLength = int64(len(payload))
+	request.Header.Set("Content-Type", mediaType)
+	request.Header.Set("X-Amz-Date", timestamp)
+	request.Header.Set("X-Amz-Content-Sha256", payloadHash)
+	canonicalHeaders := map[string]string{
+		"content-type":         mediaType,
+		"host":                 host,
+		"x-amz-content-sha256": payloadHash,
+		"x-amz-date":           timestamp,
+	}
+	if store.sessionToken != "" {
+		request.Header.Set("X-Amz-Security-Token", store.sessionToken)
+		canonicalHeaders["x-amz-security-token"] = store.sessionToken
+	}
+	signedHeaders, canonicalHeaderBlock := canonicalizeHeaders(canonicalHeaders)
+	canonicalRequest := strings.Join([]string{method, canonicalURI, "", canonicalHeaderBlock, signedHeaders, payloadHash}, "\n")
 	scope := date + "/" + store.region + "/" + serviceName + "/" + requestType
 	stringToSign := strings.Join([]string{algorithm, timestamp, scope, sha256Hex(canonicalRequest)}, "\n")
 	signature := hex.EncodeToString(hmacSHA256(store.signingKey(date), stringToSign))

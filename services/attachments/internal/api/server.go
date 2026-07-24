@@ -10,6 +10,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,17 +21,17 @@ import (
 )
 
 const (
-	maxRequestBytes    = 4 << 10
-	attachmentIDBytes  = 24
-	identifierAttempts = 3
+	maxRequestBytes     = 4 << 10
+	attachmentIDBytes   = 24
+	identifierAttempts  = 3
+	maxProfileMediaSize = 5 << 20
 )
 
 type Limits struct {
-	MaxCiphertextSize int64
-	UploadTTL         time.Duration
-	PendingTTL        time.Duration
-	DownloadTTL       time.Duration
-	RetentionTTL      time.Duration
+	MaxSize     int64
+	UploadTTL   time.Duration
+	PendingTTL  time.Duration
+	DownloadTTL time.Duration
 }
 
 type Server struct {
@@ -42,37 +44,36 @@ type Server struct {
 }
 
 type createRequest struct {
-	CiphertextSize   int64  `json:"ciphertext_size"`
-	CiphertextSHA256 string `json:"ciphertext_sha256"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256"`
 }
 
 type createResponse struct {
-	AttachmentID     string            `json:"attachment_id"`
-	UploadURL        string            `json:"upload_url"`
-	UploadExpiresAt  time.Time         `json:"upload_expires_at"`
-	RequiredHeaders  map[string]string `json:"required_headers"`
-	CiphertextSize   int64             `json:"ciphertext_size"`
-	CiphertextSHA256 string            `json:"ciphertext_sha256"`
+	AttachmentID    string            `json:"attachment_id"`
+	UploadURL       string            `json:"upload_url"`
+	UploadExpiresAt time.Time         `json:"upload_expires_at"`
+	RequiredHeaders map[string]string `json:"required_headers"`
+	Size            int64             `json:"size"`
+	SHA256          string            `json:"sha256"`
 }
 
 type readyResponse struct {
-	AttachmentID     string    `json:"attachment_id"`
-	Status           string    `json:"status"`
-	CiphertextSize   int64     `json:"ciphertext_size"`
-	CiphertextSHA256 string    `json:"ciphertext_sha256"`
-	ExpiresAt        time.Time `json:"expires_at"`
+	AttachmentID string    `json:"attachment_id"`
+	Status       string    `json:"status"`
+	Size         int64     `json:"size"`
+	SHA256       string    `json:"sha256"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
-type downloadResponse struct {
-	AttachmentID      string    `json:"attachment_id"`
-	DownloadURL       string    `json:"download_url"`
-	DownloadExpiresAt time.Time `json:"download_expires_at"`
-	CiphertextSize    int64     `json:"ciphertext_size"`
-	CiphertextSHA256  string    `json:"ciphertext_sha256"`
+type profileMediaResponse struct {
+	AvatarURL string    `json:"avatar_url"`
+	MediaType string    `json:"media_type"`
+	Size      int       `json:"size"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func NewServer(metadataStore metadata.Store, objectStore objectstore.Store, verifier *auth.Verifier, limits Limits) (*Server, error) {
-	if metadataStore == nil || objectStore == nil || verifier == nil || limits.MaxCiphertextSize <= 0 || limits.UploadTTL < time.Second || limits.PendingTTL < limits.UploadTTL || limits.DownloadTTL < time.Second || limits.RetentionTTL < time.Second {
+	if metadataStore == nil || objectStore == nil || verifier == nil || limits.MaxSize <= 0 || limits.UploadTTL < time.Second || limits.PendingTTL < limits.UploadTTL || limits.DownloadTTL < time.Second {
 		return nil, errors.New("invalid attachments server configuration")
 	}
 	return &Server{metadata: metadataStore, objects: objectStore, verifier: verifier, limits: limits, now: time.Now, identifiers: randomIdentifier}, nil
@@ -84,6 +85,12 @@ func (server *Server) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 	case request.Method == http.MethodGet && request.URL.Path == "/readyz":
 		server.readiness(writer, request)
+	case request.Method == http.MethodPut && request.URL.Path == "/v1/profile-media/me":
+		server.putProfileMedia(writer, request)
+	case request.Method == http.MethodDelete && request.URL.Path == "/v1/profile-media/me":
+		server.deleteProfileMedia(writer, request)
+	case request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, "/v1/profile-media/"):
+		server.getProfileMedia(writer, request)
 	case request.Method == http.MethodPost && request.URL.Path == "/v1/attachments":
 		server.create(writer, request)
 	case request.Method == http.MethodPost && strings.HasPrefix(request.URL.Path, "/v1/attachments/") && strings.HasSuffix(request.URL.Path, "/complete"):
@@ -95,6 +102,91 @@ func (server *Server) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 	default:
 		writeError(writer, http.StatusNotFound, "route not found")
 	}
+}
+
+func (server *Server) putProfileMedia(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := server.authenticate(writer, request)
+	if !ok {
+		return
+	}
+	mediaType := strings.TrimSpace(strings.Split(request.Header.Get("Content-Type"), ";")[0])
+	request.Body = http.MaxBytesReader(writer, request.Body, maxProfileMediaSize)
+	data, err := io.ReadAll(request.Body)
+	if err != nil {
+		writeError(writer, http.StatusRequestEntityTooLarge, "profile media is too large")
+		return
+	}
+	if !validProfileMedia(mediaType, data) {
+		writeError(writer, http.StatusBadRequest, "invalid profile media")
+		return
+	}
+	if err := server.objects.Put(request.Context(), profileMediaKey(identity.UserID), mediaType, data); err != nil {
+		writeError(writer, http.StatusServiceUnavailable, "object store unavailable")
+		return
+	}
+	now := server.now().UTC()
+	writeJSON(writer, http.StatusOK, profileMediaResponse{
+		AvatarURL: "/attachments/v1/profile-media/" + url.PathEscape(identity.UserID) + "?v=" + strconv.FormatInt(now.UnixMilli(), 10),
+		MediaType: mediaType,
+		Size:      len(data),
+		UpdatedAt: now,
+	})
+}
+
+func (server *Server) getProfileMedia(writer http.ResponseWriter, request *http.Request) {
+	userID, valid := profileMediaUserID(request.URL.Path)
+	if !valid {
+		writeError(writer, http.StatusNotFound, "profile media not found")
+		return
+	}
+	media, err := server.objects.Get(request.Context(), profileMediaKey(userID))
+	if errors.Is(err, objectstore.ErrObjectNotFound) {
+		writeError(writer, http.StatusNotFound, "profile media not found")
+		return
+	}
+	if err != nil {
+		writeError(writer, http.StatusServiceUnavailable, "object store unavailable")
+		return
+	}
+	if !validProfileMedia(media.MediaType, media.Data) {
+		writeError(writer, http.StatusNotFound, "profile media not found")
+		return
+	}
+	writer.Header().Set("Content-Type", media.MediaType)
+	writer.Header().Set("Content-Length", strconv.Itoa(len(media.Data)))
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(media.Data)
+}
+
+func (server *Server) deleteProfileMedia(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := server.authenticate(writer, request)
+	if !ok {
+		return
+	}
+	if err := server.objects.Delete(request.Context(), profileMediaKey(identity.UserID)); err != nil {
+		writeError(writer, http.StatusServiceUnavailable, "object store unavailable")
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func validProfileMedia(mediaType string, data []byte) bool {
+	allowed := map[string]struct{}{"image/jpeg": {}, "image/png": {}, "image/webp": {}}
+	if _, exists := allowed[mediaType]; !exists || len(data) == 0 || len(data) > maxProfileMediaSize {
+		return false
+	}
+	return http.DetectContentType(data) == mediaType
+}
+
+func profileMediaKey(userID string) string {
+	digest := sha256.Sum256([]byte(userID))
+	return "profile-media/" + hex.EncodeToString(digest[:])
+}
+
+func profileMediaUserID(path string) (string, bool) {
+	encoded := strings.TrimPrefix(path, "/v1/profile-media/")
+	value, err := url.PathUnescape(encoded)
+	return value, err == nil && value != "" && len(value) <= 128 && strings.TrimSpace(value) == value && !strings.Contains(value, "/")
 }
 
 func (server *Server) readiness(writer http.ResponseWriter, request *http.Request) {
@@ -120,8 +212,8 @@ func (server *Server) create(writer http.ResponseWriter, request *http.Request) 
 	if !decodeJSON(writer, request, &input) {
 		return
 	}
-	if input.CiphertextSize <= 0 || input.CiphertextSize > server.limits.MaxCiphertextSize || !validSHA256(input.CiphertextSHA256) {
-		writeError(writer, http.StatusBadRequest, "invalid ciphertext metadata")
+	if input.Size <= 0 || input.Size > server.limits.MaxSize || !validSHA256(input.SHA256) {
+		writeError(writer, http.StatusBadRequest, "invalid file metadata")
 		return
 	}
 	for attempt := 0; attempt < identifierAttempts; attempt++ {
@@ -131,22 +223,22 @@ func (server *Server) create(writer http.ResponseWriter, request *http.Request) 
 			return
 		}
 		objectKey := "attachments/" + id
-		upload, err := server.objects.PresignUpload(request.Context(), objectKey, input.CiphertextSize, input.CiphertextSHA256, server.limits.UploadTTL)
+		upload, err := server.objects.PresignUpload(request.Context(), objectKey, input.Size, input.SHA256, server.limits.UploadTTL)
 		if err != nil {
 			writeError(writer, http.StatusServiceUnavailable, "object store unavailable")
 			return
 		}
 		now := server.now().UTC()
 		attachment := metadata.Attachment{
-			ID:               id,
-			OwnerUserID:      identity.UserID,
-			OwnerDeviceID:    identity.DeviceID,
-			ObjectKey:        objectKey,
-			CiphertextSize:   input.CiphertextSize,
-			CiphertextSHA256: input.CiphertextSHA256,
-			Status:           metadata.StatusPending,
-			CreatedAt:        now,
-			ExpiresAt:        now.Add(server.limits.PendingTTL),
+			ID:             id,
+			OwnerUserID:    identity.UserID,
+			OwnerSessionID: identity.SessionID,
+			ObjectKey:      objectKey,
+			Size:           input.Size,
+			SHA256:         input.SHA256,
+			Status:         metadata.StatusPending,
+			CreatedAt:      now,
+			ExpiresAt:      now.Add(server.limits.PendingTTL),
 		}
 		if err := server.metadata.Create(request.Context(), attachment); errors.Is(err, metadata.ErrConflict) {
 			continue
@@ -155,12 +247,12 @@ func (server *Server) create(writer http.ResponseWriter, request *http.Request) 
 			return
 		}
 		writeJSON(writer, http.StatusCreated, createResponse{
-			AttachmentID:     id,
-			UploadURL:        upload.URL,
-			UploadExpiresAt:  upload.ExpiresAt,
-			RequiredHeaders:  upload.Headers,
-			CiphertextSize:   input.CiphertextSize,
-			CiphertextSHA256: input.CiphertextSHA256,
+			AttachmentID:    id,
+			UploadURL:       upload.URL,
+			UploadExpiresAt: upload.ExpiresAt,
+			RequiredHeaders: upload.Headers,
+			Size:            input.Size,
+			SHA256:          input.SHA256,
 		})
 		return
 	}
@@ -196,19 +288,19 @@ func (server *Server) complete(writer http.ResponseWriter, request *http.Request
 	}
 	objectInfo, err := server.objects.Head(request.Context(), attachment.ObjectKey)
 	if errors.Is(err, objectstore.ErrObjectNotFound) {
-		writeError(writer, http.StatusConflict, "ciphertext upload not found")
+		writeError(writer, http.StatusConflict, "file upload not found")
 		return
 	}
 	if err != nil {
 		writeError(writer, http.StatusServiceUnavailable, "object store unavailable")
 		return
 	}
-	if objectInfo.Size != attachment.CiphertextSize || objectInfo.CiphertextSHA256 != attachment.CiphertextSHA256 {
-		writeError(writer, http.StatusConflict, "ciphertext upload verification failed")
+	if objectInfo.Size != attachment.Size || objectInfo.SHA256 != attachment.SHA256 {
+		writeError(writer, http.StatusConflict, "file upload verification failed")
 		return
 	}
 	completedAt := server.now().UTC()
-	attachment, err = server.metadata.Complete(request.Context(), id, identity.UserID, completedAt, completedAt.Add(server.limits.RetentionTTL))
+	attachment, err = server.metadata.Complete(request.Context(), id, identity.UserID, completedAt, time.Date(9999, time.December, 31, 23, 59, 59, 0, time.UTC))
 	if errors.Is(err, metadata.ErrNotFound) {
 		writeError(writer, http.StatusNotFound, "attachment not found")
 		return
@@ -221,9 +313,6 @@ func (server *Server) complete(writer http.ResponseWriter, request *http.Request
 }
 
 func (server *Server) download(writer http.ResponseWriter, request *http.Request) {
-	if _, ok := server.authenticate(writer, request); !ok {
-		return
-	}
 	id, valid := attachmentID(request.URL.Path)
 	if !valid {
 		writeError(writer, http.StatusNotFound, "attachment not found")
@@ -252,13 +341,7 @@ func (server *Server) download(writer http.ResponseWriter, request *http.Request
 		writeError(writer, http.StatusServiceUnavailable, "object store unavailable")
 		return
 	}
-	writeJSON(writer, http.StatusOK, downloadResponse{
-		AttachmentID:      attachment.ID,
-		DownloadURL:       download.URL,
-		DownloadExpiresAt: download.ExpiresAt,
-		CiphertextSize:    attachment.CiphertextSize,
-		CiphertextSHA256:  attachment.CiphertextSHA256,
-	})
+	http.Redirect(writer, request, download.URL, http.StatusTemporaryRedirect)
 }
 
 func (server *Server) delete(writer http.ResponseWriter, request *http.Request) {
@@ -332,7 +415,7 @@ func randomIdentifier() (string, error) {
 }
 
 func newReadyResponse(attachment metadata.Attachment) readyResponse {
-	return readyResponse{AttachmentID: attachment.ID, Status: "ready", CiphertextSize: attachment.CiphertextSize, CiphertextSHA256: attachment.CiphertextSHA256, ExpiresAt: attachment.ExpiresAt}
+	return readyResponse{AttachmentID: attachment.ID, Status: "ready", Size: attachment.Size, SHA256: attachment.SHA256, ExpiresAt: attachment.ExpiresAt}
 }
 
 func decodeJSON(writer http.ResponseWriter, request *http.Request, destination any) bool {

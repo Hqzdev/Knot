@@ -3,34 +3,25 @@ package store
 import (
 	"context"
 	"errors"
-	"time"
+
+	knotv1 "github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1"
 )
 
 var (
-	ErrSenderInactive   = errors.New("sender device is inactive")
-	ErrRecipientAbsent  = errors.New("recipient has no active devices")
-	ErrEnvelopeCoverage = errors.New("envelopes do not cover the active device set")
-	ErrGroupState       = errors.New("group state changed")
-	ErrMessageConflict  = errors.New("message identifier conflict")
-	ErrRouteInProgress  = errors.New("message route is already in progress")
-	ErrClaimInvalid     = errors.New("route claim is invalid")
+	ErrUserNotFound         = errors.New("user not found")
+	ErrConversationNotFound = errors.New("conversation not found")
+	ErrConversationDenied   = errors.New("conversation access denied")
 )
 
-type Envelope struct {
-	DeviceID   string
-	Ciphertext []byte
+type Conversation struct {
+	ID                   string
+	Kind                 knotv1.ConversationKind
+	ParticipantUserIDs   []string
+	ParticipantUsernames []string
 }
 
-type Plan struct {
-	DeviceIDs      []string
-	SenderUsername string
-	ClaimToken     string
-	Duplicate      bool
-}
-
-type Store interface {
-	ActiveDevice(ctx context.Context, userID string, deviceID string) (bool, error)
-	ClaimRoute(ctx context.Context, messageID string, senderUserID string, senderDeviceID string, recipientUserID string, groupID string, groupRevision uint64, envelopes []Envelope, lease time.Duration) (Plan, error)
-	CompleteRoute(ctx context.Context, messageID string, claimToken string) error
-	Ping(ctx context.Context) error
+type Directory interface {
+	User(context.Context, string, string) (bool, error)
+	Conversation(context.Context, string, string) (Conversation, error)
+	Ping(context.Context) error
 }

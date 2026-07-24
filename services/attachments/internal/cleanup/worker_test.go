@@ -27,6 +27,14 @@ func (store *fakeObjectStore) Head(context.Context, string) (objectstore.ObjectI
 	return objectstore.ObjectInfo{}, nil
 }
 
+func (store *fakeObjectStore) Put(context.Context, string, string, []byte) error {
+	return nil
+}
+
+func (store *fakeObjectStore) Get(context.Context, string) (objectstore.MediaObject, error) {
+	return objectstore.MediaObject{}, nil
+}
+
 func (store *fakeObjectStore) Delete(_ context.Context, key string) error {
 	store.deleted = append(store.deleted, key)
 	return store.err

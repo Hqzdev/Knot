@@ -1,48 +1,36 @@
-# Knot Web
+# Knot Unsecure Web
 
-The web client uses React, TypeScript, Vite, and the shared Rust cryptographic core compiled to WebAssembly. It talks to Knot services through same-origin reverse-proxy paths.
+The Web client is a Next.js control-room interface for the intentionally insecure Knot Unsecure messenger.
+
+Everything visible to the client is plaintext. Sessions, refresh tokens, the outbox and message cache are stored openly in `localStorage` and IndexedDB. Every authenticated session can read the global Wiretap feed. Do not use real passwords, files or personal information.
 
 ## Run locally
 
-Install the browser Rust target and `wasm-pack`, then install JavaScript dependencies:
-
 ```sh
-rustup target add wasm32-unknown-unknown
-cargo install wasm-pack --locked
-cd clients/web
 npm install
-```
-
-Start the Knot services on their default local ports, then run:
-
-```sh
 npm run dev
 ```
 
-Vite proxies `/api`, `/gateway`, `/presence`, `/attachments`, and `/push` to the local service ports and supports WebSocket upgrades.
+The development server listens on `0.0.0.0:5173`. The full stack exposes the Web app through the Compose proxy at `http://localhost:8088`.
 
 ## Container
 
-Build from the repository root so the shared Rust workspace is available:
+Build from the repository root:
 
 ```sh
-docker build -f clients/web/Dockerfile -t knot-web .
-docker run --rm -p 8088:8080 knot-web
+docker build -f clients/web/Dockerfile -t knot-unsecure-web .
+docker run --rm -p 3000:3000 knot-unsecure-web
 ```
 
-The runtime image accepts `KNOT_API_UPSTREAM`, `KNOT_GATEWAY_UPSTREAM`, `KNOT_PRESENCE_UPSTREAM`, `KNOT_ATTACHMENTS_UPSTREAM`, and `KNOT_PUSH_UPSTREAM`. Each value is an origin such as `http://api:8080`; Nginx removes the public path prefix before proxying.
+The runtime uses the public same-origin paths `/api`, `/gateway`, `/presence`, `/attachments` and `/preview`. Traffic is HTTP and WS without TLS or origin checks.
 
 ## Verification
 
 ```sh
 npm run typecheck
 npm test
-npm run test:wasm
 npm run build
+npm run test:e2e
 ```
 
-`test:wasm` performs a real X3DH handshake, bidirectional Double Ratchet exchange, serialized session restore, Sender Key distribution, group encryption, out-of-order delivery, and replay rejection through the generated browser binding.
-
-## Local security
-
-Private identity, ratchet, message-history, pending-prekey, and refresh-token records are AES-GCM encrypted in IndexedDB. The wrapping key is a non-extractable WebCrypto key stored by the browser. Access tokens are limited to `sessionStorage`; private state is never written to `localStorage`.
+Playwright covers the risk gate, all three authentication modes, chats, Wiretap, Wall and Roulette on desktop and mobile layouts.

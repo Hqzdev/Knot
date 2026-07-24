@@ -1,13 +1,13 @@
-.PHONY: fmt-check crypto-check go-check web-check check apple-framework apple-ios apple-macos compose-config up smoke e2e down logs
+.PHONY: fmt-check proto-check legacy-check go-check web-check check compose-config up smoke e2e down logs
 
 fmt-check:
 	test -z "$$(gofmt -l $$(rg --files services proto -g '*.go'))"
-	cargo fmt --check
 
-crypto-check:
-	cargo clippy --all-targets --all-features -- -D warnings
-	cargo test --all-features
-	cargo check --target wasm32-unknown-unknown -p knot-crypto-core
+proto-check:
+	buf lint proto
+
+legacy-check:
+	./scripts/check_plaintext_product.sh
 
 go-check:
 	go test -race ./...
@@ -16,16 +16,7 @@ go-check:
 web-check:
 	npm --prefix clients/web run check
 
-check: fmt-check crypto-check go-check web-check
-
-apple-framework:
-	./scripts/build_ios_xcframework.sh
-
-apple-ios: apple-framework
-	xcodebuild -project clients/apple/Knot/Knot.xcodeproj -scheme Knot -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
-
-apple-macos: apple-framework
-	xcodebuild -project clients/apple/Knot/Knot.xcodeproj -scheme Knot -configuration Debug -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO build
+check: fmt-check proto-check legacy-check go-check web-check
 
 compose-config:
 	docker compose config --quiet

@@ -9,7 +9,7 @@ export default defineConfig({
   retries: 0,
   reporter: "line",
   use: {
-    baseURL: process.env.KNOT_WEB_URL ?? "http://127.0.0.1:5173",
+    baseURL: process.env.KNOT_WEB_URL ?? "http://localhost:5173",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -17,6 +17,10 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "mobile-chromium",
+      use: { ...devices["Pixel 7"] },
     },
   ],
 });

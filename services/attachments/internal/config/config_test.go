@@ -8,7 +8,7 @@ func TestLoadDefaultsToBoundedProductionConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if configuration.Address != ":8082" || configuration.MetadataMode != "memory" || configuration.Limits.MaxCiphertextSize != defaultMaxCiphertextSize || configuration.CleanupBatch != defaultCleanupBatch || !configuration.S3.PathStyle {
+	if configuration.Address != ":8082" || configuration.MetadataMode != "memory" || configuration.Limits.MaxSize != defaultMaxSize || configuration.CleanupBatch != defaultCleanupBatch || !configuration.S3.PathStyle {
 		t.Fatalf("unexpected defaults: %#v", configuration)
 	}
 }

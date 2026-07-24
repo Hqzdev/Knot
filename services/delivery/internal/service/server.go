@@ -3,172 +3,151 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	knotv1 "github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1"
-	"github.com/yaroslavfairfieldd/knot/services/delivery/internal/queue"
-	"github.com/yaroslavfairfieldd/knot/services/delivery/internal/token"
+	"github.com/yaroslavfairfieldd/knot/services/delivery/internal/store"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-const (
-	maxIdentityBytes    = 128
-	maxCiphertextBytes  = 1 << 20
-	maxSyncLimit        = 100
-	defaultSyncLimit    = 50
-	maxAcknowledgements = 100
-	maxGroupRevision    = uint64(1<<63 - 1)
-)
+type Publisher interface {
+	Publish(context.Context, *knotv1.WiretapRecord) error
+}
 
 type Server struct {
 	knotv1.UnimplementedDeliveryServiceServer
-	queue        queue.Queue
-	signer       *token.Signer
-	now          func() time.Time
-	maxClockSkew time.Duration
+	store     store.Store
+	publisher Publisher
+	now       func() time.Time
 }
 
-func NewServer(deliveryQueue queue.Queue, signer *token.Signer, maxClockSkew time.Duration) (*Server, error) {
-	if deliveryQueue == nil || signer == nil || maxClockSkew <= 0 {
-		return nil, errors.New("invalid delivery server configuration")
+func NewServer(messageStore store.Store, publisher Publisher) (*Server, error) {
+	if messageStore == nil || publisher == nil {
+		return nil, errors.New("invalid Delivery server configuration")
 	}
-	return &Server{queue: deliveryQueue, signer: signer, now: time.Now, maxClockSkew: maxClockSkew}, nil
+	return &Server{store: messageStore, publisher: publisher, now: time.Now}, nil
 }
 
-func (server *Server) Enqueue(ctx context.Context, request *knotv1.EnqueueRequest) (*knotv1.EnqueueResponse, error) {
-	value := request.GetEnvelope()
-	if value == nil || !validIdentity(value.GetMessageId()) || !validIdentity(value.GetRecipientUserId()) || !validIdentity(value.GetRecipientDeviceId()) || !validIdentity(value.GetSenderUserId()) || !validIdentity(value.GetSenderDeviceId()) || !validIdentity(value.GetSenderUsername()) || !validGroupMetadata(value.GetGroupId(), value.GetGroupRevision()) || len(value.GetCiphertext()) == 0 || len(value.GetCiphertext()) > maxCiphertextBytes {
-		return nil, status.Error(codes.InvalidArgument, "invalid delivery envelope")
+func (server *Server) Append(ctx context.Context, request *knotv1.AppendRequest) (*knotv1.AppendResponse, error) {
+	message := request.GetMessage()
+	if err := validateMessage(message); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	createdAt := time.UnixMilli(value.GetCreatedAtUnixMillis()).UTC()
-	now := server.now().UTC()
-	if value.GetCreatedAtUnixMillis() <= 0 || createdAt.Before(now.Add(-server.maxClockSkew)) || createdAt.After(now.Add(server.maxClockSkew)) {
-		return nil, status.Error(codes.InvalidArgument, "invalid delivery timestamp")
+	stored, duplicate, err := server.store.Append(ctx, message)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "message store unavailable")
 	}
-	result, err := server.queue.Enqueue(ctx, queue.Envelope{
-		MessageID:         value.GetMessageId(),
-		RecipientUserID:   value.GetRecipientUserId(),
-		RecipientDeviceID: value.GetRecipientDeviceId(),
-		SenderUserID:      value.GetSenderUserId(),
-		SenderDeviceID:    value.GetSenderDeviceId(),
-		SenderUsername:    value.GetSenderUsername(),
-		GroupID:           value.GetGroupId(),
-		GroupRevision:     value.GetGroupRevision(),
-		Ciphertext:        append([]byte(nil), value.GetCiphertext()...),
-		CreatedAt:         createdAt,
+	stored.Route = append(stored.Route, &knotv1.RouteHop{
+		Service: "nats", Status: "published for public fanout", OccurredAtUnixMillis: server.now().UTC().UnixMilli(),
 	})
-	if errors.Is(err, queue.ErrMessageConflict) {
-		return nil, status.Error(codes.AlreadyExists, "message identifier conflict")
+	if err := server.publish(ctx, &knotv1.WiretapRecord{
+		EventId:              stored.ClientCommandId,
+		EventKind:            knotv1.MessageEventKind_MESSAGE_EVENT_KIND_CREATE,
+		Message:              stored,
+		ActorUserId:          stored.AuthorUserId,
+		ActorUsername:        stored.AuthorUsername,
+		SessionId:            stored.SessionId,
+		SessionMode:          stored.SessionMode,
+		OccurredAtUnixMillis: stored.CreatedAtUnixMillis,
+	}); err != nil {
+		return nil, status.Error(codes.Unavailable, "public fanout unavailable")
 	}
-	if err != nil {
-		return nil, status.Error(codes.Unavailable, "delivery queue unavailable")
-	}
-	return &knotv1.EnqueueResponse{Duplicate: result.Duplicate, Sequence: result.Sequence}, nil
+	return &knotv1.AppendResponse{Message: stored, Duplicate: duplicate}, nil
 }
 
-func (server *Server) Sync(ctx context.Context, request *knotv1.SyncRequest) (*knotv1.SyncResponse, error) {
-	if !validIdentity(request.GetUserId()) || !validIdentity(request.GetDeviceId()) {
-		return nil, status.Error(codes.InvalidArgument, "invalid delivery identity")
+func (server *Server) ApplyEvent(ctx context.Context, request *knotv1.ApplyEventRequest) (*knotv1.ApplyEventResponse, error) {
+	if request.GetClientCommandId() == "" || request.GetMessageId() == "" || request.GetActorUserId() == "" || request.GetActorUsername() == "" || request.GetSessionId() == "" || request.GetSessionMode() == knotv1.SessionMode_SESSION_MODE_UNSPECIFIED || request.GetKind() == knotv1.MessageEventKind_MESSAGE_EVENT_KIND_UNSPECIFIED || request.GetKind() == knotv1.MessageEventKind_MESSAGE_EVENT_KIND_CREATE {
+		return nil, status.Error(codes.InvalidArgument, "invalid message event")
 	}
-	limit := int(request.GetLimit())
+	if request.OccurredAtUnixMillis <= 0 {
+		request.OccurredAtUnixMillis = server.now().UTC().UnixMilli()
+	}
+	message, duplicate, err := server.store.ApplyEvent(ctx, request)
+	switch {
+	case errors.Is(err, store.ErrMessageNotFound):
+		return nil, status.Error(codes.NotFound, "message not found")
+	case errors.Is(err, store.ErrForbidden):
+		return nil, status.Error(codes.PermissionDenied, "message action forbidden")
+	case errors.Is(err, store.ErrInvalidEvent):
+		return nil, status.Error(codes.InvalidArgument, "invalid message event")
+	case err != nil:
+		return nil, status.Error(codes.Unavailable, "message store unavailable")
+	}
+	if !duplicate {
+		if err := server.publish(ctx, &knotv1.WiretapRecord{
+			EventId:              request.ClientCommandId,
+			EventKind:            request.Kind,
+			Message:              message,
+			ActorUserId:          request.ActorUserId,
+			ActorUsername:        request.ActorUsername,
+			SessionId:            request.SessionId,
+			SessionMode:          request.SessionMode,
+			Text:                 request.Text,
+			Emoji:                request.Emoji,
+			Active:               request.Active,
+			OccurredAtUnixMillis: request.OccurredAtUnixMillis,
+		}); err != nil {
+			return nil, status.Error(codes.Unavailable, "public fanout unavailable")
+		}
+	}
+	return &knotv1.ApplyEventResponse{Message: message, Duplicate: duplicate}, nil
+}
+
+func (server *Server) History(ctx context.Context, request *knotv1.HistoryRequest) (*knotv1.HistoryResponse, error) {
+	limit := normalizedLimit(request.GetLimit())
+	if request.GetUserId() == "" || request.GetConversationId() == "" || limit == 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid history request")
+	}
+	messages, next, err := server.store.History(ctx, request.UserId, request.ConversationId, request.AfterSequence, limit)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "message store unavailable")
+	}
+	return &knotv1.HistoryResponse{Messages: messages, NextSequence: next}, nil
+}
+
+func (server *Server) Wiretap(ctx context.Context, request *knotv1.WiretapRequest) (*knotv1.WiretapResponse, error) {
+	limit := normalizedLimit(request.GetLimit())
 	if limit == 0 {
-		limit = defaultSyncLimit
+		return nil, status.Error(codes.InvalidArgument, "invalid Wiretap request")
 	}
-	if limit < 1 || limit > maxSyncLimit {
-		return nil, status.Error(codes.InvalidArgument, "invalid sync limit")
-	}
-	after := queue.Cursor{CreatedAt: time.Unix(0, 0).UTC()}
-	if request.GetCursor() != "" {
-		parsed, err := server.signer.ParseCursor(request.GetCursor(), request.GetUserId(), request.GetDeviceId())
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid sync cursor")
-		}
-		after = queue.Cursor{CreatedAt: parsed.CreatedAt, MessageID: parsed.MessageID}
-	}
-	values, err := server.queue.Sync(ctx, request.GetUserId(), request.GetDeviceId(), after, limit)
+	records, next, err := server.store.Wiretap(ctx, store.WiretapFilter{
+		AfterSequence: request.AfterSequence,
+		Limit:         limit,
+		Author:        request.Author,
+		Participant:   request.Participant,
+		Conversation:  request.ConversationId,
+		SessionMode:   request.SessionMode,
+		EventKind:     request.EventKind,
+	})
 	if err != nil {
-		return nil, status.Error(codes.Unavailable, "delivery queue unavailable")
+		return nil, status.Error(codes.Unavailable, "message store unavailable")
 	}
-	response := &knotv1.SyncResponse{Messages: make([]*knotv1.SyncedEnvelope, 0, len(values)), NextCursor: request.GetCursor()}
-	next := after
-	for _, value := range values {
-		cursor, err := server.signer.Cursor(request.GetUserId(), request.GetDeviceId(), token.Cursor{CreatedAt: value.Cursor.CreatedAt, MessageID: value.Cursor.MessageID})
-		if err != nil {
-			return nil, status.Error(codes.Internal, "delivery token creation failed")
-		}
-		acknowledgement, err := server.signer.Acknowledgement(request.GetUserId(), request.GetDeviceId(), value.Envelope.MessageID, value.AckHandle)
-		if err != nil {
-			return nil, status.Error(codes.Internal, "delivery token creation failed")
-		}
-		response.Messages = append(response.Messages, &knotv1.SyncedEnvelope{
-			Envelope: &knotv1.DeliveryEnvelope{
-				MessageId:           value.Envelope.MessageID,
-				RecipientUserId:     value.Envelope.RecipientUserID,
-				RecipientDeviceId:   value.Envelope.RecipientDeviceID,
-				SenderUserId:        value.Envelope.SenderUserID,
-				SenderDeviceId:      value.Envelope.SenderDeviceID,
-				SenderUsername:      value.Envelope.SenderUsername,
-				GroupId:             value.Envelope.GroupID,
-				GroupRevision:       value.Envelope.GroupRevision,
-				Ciphertext:          append([]byte(nil), value.Envelope.Ciphertext...),
-				CreatedAtUnixMillis: value.Envelope.CreatedAt.UnixMilli(),
-			},
-			Cursor:      cursor,
-			AckToken:    acknowledgement,
-			Redelivered: value.Redelivered,
-		})
-		if cursorAfter(value.Cursor, next) {
-			next = value.Cursor
-			response.NextCursor = cursor
-		}
-	}
-	return response, nil
+	return &knotv1.WiretapResponse{Records: records, NextSequence: next}, nil
 }
 
-func (server *Server) Acknowledge(ctx context.Context, request *knotv1.AcknowledgeRequest) (*knotv1.AcknowledgeResponse, error) {
-	if !validIdentity(request.GetUserId()) || !validIdentity(request.GetDeviceId()) || len(request.GetAcknowledgements()) == 0 || len(request.GetAcknowledgements()) > maxAcknowledgements {
-		return nil, status.Error(codes.InvalidArgument, "invalid acknowledgement request")
-	}
-	seen := make(map[string]struct{}, len(request.GetAcknowledgements()))
-	var acknowledged uint32
-	for _, value := range request.GetAcknowledgements() {
-		if value == nil || !validIdentity(value.GetMessageId()) {
-			return nil, status.Error(codes.InvalidArgument, "invalid acknowledgement")
-		}
-		if _, duplicate := seen[value.GetMessageId()]; duplicate {
-			return nil, status.Error(codes.InvalidArgument, "duplicate acknowledgement")
-		}
-		seen[value.GetMessageId()] = struct{}{}
-		handle, err := server.signer.ParseAcknowledgement(value.GetAckToken(), request.GetUserId(), request.GetDeviceId(), value.GetMessageId())
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid acknowledgement token")
-		}
-		err = server.queue.Acknowledge(ctx, request.GetUserId(), request.GetDeviceId(), value.GetMessageId(), handle)
-		if err != nil && !errors.Is(err, queue.ErrAckNotFound) {
-			return nil, status.Error(codes.Unavailable, "delivery queue unavailable")
-		}
-		acknowledged++
-	}
-	return &knotv1.AcknowledgeResponse{Acknowledged: acknowledged}, nil
+func (server *Server) publish(ctx context.Context, record *knotv1.WiretapRecord) error {
+	publishContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	return server.publisher.Publish(publishContext, record)
 }
 
-func validIdentity(value string) bool {
-	return value != "" && len(value) <= maxIdentityBytes && utf8.ValidString(value) && strings.TrimSpace(value) == value
+func normalizedLimit(value uint32) int {
+	if value == 0 {
+		return 50
+	}
+	if value > 200 {
+		return 0
+	}
+	return int(value)
 }
 
-func validGroupMetadata(groupID string, revision uint64) bool {
-	if groupID == "" {
-		return revision == 0
+func validateMessage(message *knotv1.Message) error {
+	if message == nil || message.GetClientCommandId() == "" || message.GetConversationId() == "" || message.GetAuthorUserId() == "" || message.GetAuthorUsername() == "" || message.GetSessionId() == "" || message.GetSessionMode() == knotv1.SessionMode_SESSION_MODE_UNSPECIFIED || message.GetConversationKind() == knotv1.ConversationKind_CONVERSATION_KIND_UNSPECIFIED || message.GetKind() == knotv1.MessageKind_MESSAGE_KIND_UNSPECIFIED || len(message.GetParticipantUserIds()) == 0 || len(message.GetParticipantUserIds()) != len(message.GetParticipantUsernames()) {
+		return errors.New("invalid message")
 	}
-	return validIdentity(groupID) && revision > 0 && revision <= maxGroupRevision
-}
-
-func cursorAfter(left queue.Cursor, right queue.Cursor) bool {
-	if left.CreatedAt.After(right.CreatedAt) {
-		return true
+	if len(message.GetOriginalText()) > 64<<10 {
+		return errors.New("message too large")
 	}
-	return left.CreatedAt.Equal(right.CreatedAt) && left.MessageID > right.MessageID
+	return nil
 }

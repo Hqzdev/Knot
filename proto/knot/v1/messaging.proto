@@ -6,108 +6,180 @@ option go_package = "github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1;kno
 
 service RouterService {
   rpc AuthorizeConnection(AuthorizeConnectionRequest) returns (AuthorizeConnectionResponse);
-  rpc RouteMessage(RouteMessageRequest) returns (RouteMessageResponse);
+  rpc RouteCommand(RouteCommandRequest) returns (RouteCommandResponse);
 }
 
 service DeliveryService {
-  rpc Enqueue(EnqueueRequest) returns (EnqueueResponse);
-  rpc Sync(SyncRequest) returns (SyncResponse);
-  rpc Acknowledge(AcknowledgeRequest) returns (AcknowledgeResponse);
+  rpc Append(AppendRequest) returns (AppendResponse);
+  rpc ApplyEvent(ApplyEventRequest) returns (ApplyEventResponse);
+  rpc History(HistoryRequest) returns (HistoryResponse);
+  rpc Wiretap(WiretapRequest) returns (WiretapResponse);
+}
+
+enum SessionMode {
+  SESSION_MODE_UNSPECIFIED = 0;
+  SESSION_MODE_PASSWORD = 1;
+  SESSION_MODE_GUEST = 2;
+  SESSION_MODE_IMPERSONATED = 3;
+}
+
+enum ConversationKind {
+  CONVERSATION_KIND_UNSPECIFIED = 0;
+  CONVERSATION_KIND_DIRECT = 1;
+  CONVERSATION_KIND_GROUP = 2;
+  CONVERSATION_KIND_WALL = 3;
+  CONVERSATION_KIND_ROULETTE = 4;
+}
+
+enum MessageKind {
+  MESSAGE_KIND_UNSPECIFIED = 0;
+  MESSAGE_KIND_TEXT = 1;
+  MESSAGE_KIND_ATTACHMENT = 2;
+  MESSAGE_KIND_SYSTEM = 3;
+}
+
+enum MessageEventKind {
+  MESSAGE_EVENT_KIND_UNSPECIFIED = 0;
+  MESSAGE_EVENT_KIND_CREATE = 1;
+  MESSAGE_EVENT_KIND_EDIT = 2;
+  MESSAGE_EVENT_KIND_DELETE = 3;
+  MESSAGE_EVENT_KIND_REACTION = 4;
+  MESSAGE_EVENT_KIND_RECEIPT = 5;
 }
 
 message AuthorizeConnectionRequest {
   string user_id = 1;
-  string device_id = 2;
+  string session_id = 2;
 }
 
 message AuthorizeConnectionResponse {
   bool active = 1;
 }
 
-message DeviceEnvelope {
-  string recipient_device_id = 1;
-  bytes ciphertext = 2;
+message RouteCommandRequest {
+  string client_command_id = 1;
+  string conversation_id = 2;
+  string author_user_id = 3;
+  string author_username = 4;
+  string session_id = 5;
+  SessionMode session_mode = 6;
+  MessageKind kind = 7;
+  string text = 8;
+  string attachment_id = 9;
+  string reply_to_id = 10;
+  string forwarded_from_id = 11;
 }
 
-message RouteMessageRequest {
-  string message_id = 1;
-  string sender_user_id = 2;
-  string sender_device_id = 3;
-  string recipient_user_id = 4;
-  repeated DeviceEnvelope envelopes = 5;
-  string group_id = 6;
-  uint64 group_revision = 7;
-}
-
-enum RouteKind {
-  ROUTE_KIND_UNSPECIFIED = 0;
-  ROUTE_KIND_LIVE = 1;
-  ROUTE_KIND_QUEUED = 2;
-}
-
-message DeviceRoute {
-  string recipient_device_id = 1;
-  RouteKind kind = 2;
-}
-
-message RouteMessageResponse {
-  string message_id = 1;
+message RouteCommandResponse {
+  Message message = 1;
   bool duplicate = 2;
-  repeated DeviceRoute routes = 3;
 }
 
-message DeliveryEnvelope {
-  string message_id = 1;
-  string recipient_user_id = 2;
-  string recipient_device_id = 3;
-  string sender_user_id = 4;
-  string sender_device_id = 5;
-  bytes ciphertext = 6;
-  int64 created_at_unix_millis = 7;
-  string sender_username = 8;
-  string group_id = 9;
-  uint64 group_revision = 10;
+message RouteHop {
+  string service = 1;
+  string status = 2;
+  int64 occurred_at_unix_millis = 3;
 }
 
-message EnqueueRequest {
-  DeliveryEnvelope envelope = 1;
+message Reaction {
+  string emoji = 1;
+  repeated string usernames = 2;
 }
 
-message EnqueueResponse {
-  bool duplicate = 1;
-  uint64 sequence = 2;
+message Message {
+  uint64 sequence = 1;
+  string id = 2;
+  string client_command_id = 3;
+  string conversation_id = 4;
+  ConversationKind conversation_kind = 5;
+  repeated string participant_user_ids = 6;
+  repeated string participant_usernames = 7;
+  string author_user_id = 8;
+  string author_username = 9;
+  string session_id = 10;
+  SessionMode session_mode = 11;
+  MessageKind kind = 12;
+  string original_text = 13;
+  string current_text = 14;
+  string attachment_id = 15;
+  string reply_to_id = 16;
+  string forwarded_from_id = 17;
+  int64 created_at_unix_millis = 18;
+  int64 server_seen_at_unix_millis = 19;
+  int64 edited_at_unix_millis = 20;
+  int64 deleted_at_unix_millis = 21;
+  int64 delivered_at_unix_millis = 22;
+  int64 read_at_unix_millis = 23;
+  repeated Reaction reactions = 24;
+  repeated RouteHop route = 25;
 }
 
-message SyncRequest {
+message AppendRequest {
+  Message message = 1;
+}
+
+message AppendResponse {
+  Message message = 1;
+  bool duplicate = 2;
+}
+
+message ApplyEventRequest {
+  string client_command_id = 1;
+  string message_id = 2;
+  string actor_user_id = 3;
+  string actor_username = 4;
+  string session_id = 5;
+  SessionMode session_mode = 6;
+  MessageEventKind kind = 7;
+  string text = 8;
+  string emoji = 9;
+  bool active = 10;
+  int64 occurred_at_unix_millis = 11;
+}
+
+message ApplyEventResponse {
+  Message message = 1;
+  bool duplicate = 2;
+}
+
+message HistoryRequest {
   string user_id = 1;
-  string device_id = 2;
-  string cursor = 3;
+  string conversation_id = 2;
+  uint64 after_sequence = 3;
   uint32 limit = 4;
 }
 
-message SyncedEnvelope {
-  DeliveryEnvelope envelope = 1;
-  string cursor = 2;
-  string ack_token = 3;
-  bool redelivered = 4;
+message HistoryResponse {
+  repeated Message messages = 1;
+  uint64 next_sequence = 2;
 }
 
-message SyncResponse {
-  repeated SyncedEnvelope messages = 1;
-  string next_cursor = 2;
+message WiretapRequest {
+  uint64 after_sequence = 1;
+  uint32 limit = 2;
+  string author = 3;
+  string participant = 4;
+  string conversation_id = 5;
+  SessionMode session_mode = 6;
+  MessageEventKind event_kind = 7;
 }
 
-message Acknowledgement {
-  string message_id = 1;
-  string ack_token = 2;
+message WiretapRecord {
+  uint64 sequence = 1;
+  string event_id = 2;
+  MessageEventKind event_kind = 3;
+  Message message = 4;
+  string actor_user_id = 5;
+  string actor_username = 6;
+  string session_id = 7;
+  SessionMode session_mode = 8;
+  string text = 9;
+  string emoji = 10;
+  bool active = 11;
+  int64 occurred_at_unix_millis = 12;
 }
 
-message AcknowledgeRequest {
-  string user_id = 1;
-  string device_id = 2;
-  repeated Acknowledgement acknowledgements = 3;
-}
-
-message AcknowledgeResponse {
-  uint32 acknowledged = 1;
+message WiretapResponse {
+  repeated WiretapRecord records = 1;
+  uint64 next_sequence = 2;
 }

@@ -1,595 +1,397 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/gorilla/websocket"
 	knotv1 "github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1"
-	"github.com/yaroslavfairfieldd/knot/services/gateway/internal/auth"
-	"github.com/yaroslavfairfieldd/knot/services/gateway/internal/connection"
-	"github.com/yaroslavfairfieldd/knot/services/gateway/internal/fanout"
-	"github.com/yaroslavfairfieldd/knot/services/shared/origin"
+	"github.com/yaroslavfairfieldd/knot/services/shared/session"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-)
-
-const (
-	websocketJWTProtocolPrefix = "knot.jwt."
-	maxFrameBytes              = 5 << 20
-	maxIdentityBytes           = 128
-	maxCiphertextBytes         = 1 << 20
-	maxEnvelopeCount           = 100
-	maxAcknowledgements        = 100
-	writeTimeout               = 5 * time.Second
-	pongWait                   = 60 * time.Second
-	pingInterval               = 25 * time.Second
-	leaseRefreshInterval       = 15 * time.Second
-	maxGroupRevision           = uint64(1<<63 - 1)
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 type Server struct {
-	verifier     *auth.Verifier
-	router       knotv1.RouterServiceClient
-	delivery     knotv1.DeliveryServiceClient
-	registry     *connection.Registry
-	fanout       fanout.Fanout
-	originPolicy origin.Policy
-	rpcTimeout   time.Duration
-	upgrader     websocket.Upgrader
-	liveSlots    chan struct{}
+	sessions *session.Manager
+	router   knotv1.RouterServiceClient
+	delivery knotv1.DeliveryServiceClient
+	timeout  time.Duration
+	upgrader websocket.Upgrader
+	mutex    sync.RWMutex
+	clients  map[*client]struct{}
 }
 
 type client struct {
 	connection *websocket.Conn
+	claims     session.Claims
 	outgoing   chan []byte
-	closeOnce  sync.Once
 }
 
-type frameHeader struct {
-	Type      string `json:"type"`
-	RequestID string `json:"request_id"`
+type command struct {
+	Type            string `json:"type"`
+	ClientCommandID string `json:"client_command_id"`
+	ConversationID  string `json:"conversation_id"`
+	MessageID       string `json:"message_id"`
+	Text            string `json:"text"`
+	AttachmentID    string `json:"attachment_id"`
+	ReplyToID       string `json:"reply_to_id"`
+	ForwardedFromID string `json:"forwarded_from_id"`
+	Emoji           string `json:"emoji"`
+	Active          bool   `json:"active"`
 }
 
-type sendFrame struct {
-	Type            string          `json:"type"`
-	RequestID       string          `json:"request_id"`
-	MessageID       string          `json:"message_id"`
-	RecipientUserID string          `json:"recipient_user_id"`
-	GroupID         string          `json:"group_id,omitempty"`
-	GroupRevision   uint64          `json:"group_revision,omitempty"`
-	Envelopes       []envelopeFrame `json:"envelopes"`
-}
-
-type envelopeFrame struct {
-	RecipientDeviceID string `json:"recipient_device_id"`
-	Ciphertext        string `json:"ciphertext"`
-}
-
-type syncFrame struct {
-	Type      string `json:"type"`
-	RequestID string `json:"request_id"`
-	Cursor    string `json:"cursor"`
-	Limit     uint32 `json:"limit"`
-}
-
-type ackFrame struct {
-	Type             string                 `json:"type"`
-	RequestID        string                 `json:"request_id"`
-	Acknowledgements []acknowledgementFrame `json:"acknowledgements"`
-}
-
-type acknowledgementFrame struct {
-	MessageID string `json:"message_id"`
-	AckToken  string `json:"ack_token"`
-}
-
-type messageFrame struct {
-	ID                string `json:"id"`
-	MessageID         string `json:"message_id"`
-	RecipientUserID   string `json:"recipient_user_id"`
-	RecipientDeviceID string `json:"recipient_device_id"`
-	SenderUserID      string `json:"sender_user_id"`
-	SenderUsername    string `json:"sender_username"`
-	SenderDeviceID    string `json:"sender_device_id"`
-	GroupID           string `json:"group_id,omitempty"`
-	GroupRevision     uint64 `json:"group_revision,omitempty"`
-	Ciphertext        string `json:"ciphertext"`
-	CreatedAt         string `json:"created_at"`
-	Cursor            string `json:"cursor"`
-	AckToken          string `json:"ack_token"`
-	Redelivered       bool   `json:"redelivered"`
-}
-
-func NewServer(verifier *auth.Verifier, router knotv1.RouterServiceClient, delivery knotv1.DeliveryServiceClient, registry *connection.Registry, shardFanout fanout.Fanout, originPolicy origin.Policy, rpcTimeout time.Duration) (*Server, error) {
-	if verifier == nil || router == nil || delivery == nil || registry == nil || shardFanout == nil || rpcTimeout <= 0 {
-		return nil, errors.New("invalid Gateway server configuration")
+func NewServer(manager *session.Manager, router knotv1.RouterServiceClient, delivery knotv1.DeliveryServiceClient, timeout time.Duration) (*Server, error) {
+	if manager == nil || router == nil || delivery == nil || timeout <= 0 {
+		return nil, errors.New("invalid Gateway configuration")
 	}
-	server := &Server{
-		verifier:     verifier,
-		router:       router,
-		delivery:     delivery,
-		registry:     registry,
-		fanout:       shardFanout,
-		originPolicy: originPolicy,
-		rpcTimeout:   rpcTimeout,
-		liveSlots:    make(chan struct{}, 32),
-	}
-	server.upgrader = websocket.Upgrader{
-		ReadBufferSize:  16 << 10,
-		WriteBufferSize: 16 << 10,
-		CheckOrigin:     server.checkOrigin,
-	}
-	return server, nil
+	return &Server{
+		sessions: manager,
+		router:   router,
+		delivery: delivery,
+		timeout:  timeout,
+		upgrader: websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }, ReadBufferSize: 16 << 10, WriteBufferSize: 16 << 10},
+		clients:  make(map[*client]struct{}),
+	}, nil
 }
 
 func (server *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Cache-Control", "no-store")
-	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	switch {
-	case request.Method == http.MethodGet && request.URL.Path == "/healthz":
-		writeHTTP(writer, http.StatusOK, map[string]string{"status": "ok"})
-	case request.Method == http.MethodGet && request.URL.Path == "/readyz":
-		ctx, cancel := context.WithTimeout(request.Context(), 2*time.Second)
-		defer cancel()
-		if server.fanout.Ping(ctx) != nil {
-			writeHTTP(writer, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
-			return
-		}
-		writeHTTP(writer, http.StatusOK, map[string]string{"status": "ready"})
-	case request.Method == http.MethodGet && request.URL.Path == "/v1/gateway/ws":
-		server.websocket(writer, request)
+	case request.Method == http.MethodGet && request.URL.Path == "/ready":
+		writeJSON(writer, http.StatusOK, map[string]string{"status": "listening to everyone"})
+	case request.Method == http.MethodGet && request.URL.Path == "/v1/messages":
+		server.history(writer, request)
+	case request.Method == http.MethodGet && request.URL.Path == "/v1/wiretap":
+		server.wiretap(writer, request)
+	case request.Method == http.MethodGet && request.URL.Path == "/v1/socket":
+		server.socket(writer, request)
 	default:
-		writeHTTP(writer, http.StatusNotFound, map[string]string{"error": "route not found"})
+		writeJSON(writer, http.StatusNotFound, map[string]string{"error": "route not found"})
 	}
 }
 
-func (server *Server) Run(ctx context.Context) error {
-	refreshErrors := make(chan error, 1)
-	go func() {
-		ticker := time.NewTicker(leaseRefreshInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				refreshErrors <- nil
-				return
-			case <-ticker.C:
-				refreshContext, cancel := context.WithTimeout(ctx, 3*time.Second)
-				err := server.fanout.Refresh(refreshContext, server.registry.Identities())
-				cancel()
-				if err != nil {
-					refreshErrors <- err
-					return
-				}
-			}
+func (server *Server) Publish(record *knotv1.WiretapRecord) {
+	recordPayload, err := protojson.Marshal(record)
+	if err != nil {
+		return
+	}
+	wiretapPayload, err := json.Marshal(map[string]any{"type": "wiretap", "record": json.RawMessage(recordPayload)})
+	if err != nil {
+		return
+	}
+	messagePayload, err := json.Marshal(map[string]any{"type": "message", "message": json.RawMessage(messageJSON(record.Message))})
+	if err != nil {
+		return
+	}
+	tracePayload := routeTraceJSON(record.Message)
+	server.mutex.RLock()
+	defer server.mutex.RUnlock()
+	for current := range server.clients {
+		server.enqueue(current, wiretapPayload)
+		if tracePayload != nil {
+			server.enqueue(current, tracePayload)
 		}
-	}()
-	subscribeErrors := make(chan error, 1)
-	go func() {
-		subscribeErrors <- server.fanout.Subscribe(ctx, server.liveSignal)
-	}()
-	select {
-	case err := <-refreshErrors:
-		return err
-	case err := <-subscribeErrors:
-		if errors.Is(err, context.Canceled) {
-			return nil
+		if record.Message != nil && (record.Message.ConversationKind == knotv1.ConversationKind_CONVERSATION_KIND_WALL || contains(record.Message.ParticipantUserIds, current.claims.UserID)) {
+			server.enqueue(current, messagePayload)
 		}
-		return err
-	case <-ctx.Done():
-		return nil
 	}
 }
 
-func (server *Server) websocket(writer http.ResponseWriter, request *http.Request) {
-	identity, protocol, err := server.authenticate(request)
+func (server *Server) history(writer http.ResponseWriter, request *http.Request) {
+	claims, ok := server.authenticate(writer, request)
+	if !ok {
+		return
+	}
+	conversationID := request.URL.Query().Get("conversation_id")
+	if conversationID == "" {
+		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "conversation_id is required"})
+		return
+	}
+	response, err := server.delivery.History(request.Context(), &knotv1.HistoryRequest{
+		UserId:         claims.UserID,
+		ConversationId: conversationID,
+		AfterSequence:  uint64Value(request.URL.Query().Get("after")),
+		Limit:          uint32Value(request.URL.Query().Get("limit"), 50),
+	})
 	if err != nil {
-		writeHTTP(writer, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		writeRPCError(writer, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(request.Context(), server.rpcTimeout)
-	authorization, err := server.router.AuthorizeConnection(ctx, &knotv1.AuthorizeConnectionRequest{UserId: identity.UserID, DeviceId: identity.DeviceID})
-	cancel()
-	if err != nil || !authorization.GetActive() {
-		writeHTTP(writer, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+	writeProto(writer, response)
+}
+
+func (server *Server) wiretap(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := server.authenticate(writer, request); !ok {
 		return
 	}
-	responseHeader := http.Header{}
-	if protocol != "" {
-		responseHeader.Set("Sec-WebSocket-Protocol", protocol)
+	response, err := server.delivery.Wiretap(request.Context(), &knotv1.WiretapRequest{
+		AfterSequence:  uint64Value(request.URL.Query().Get("after")),
+		Limit:          uint32Value(request.URL.Query().Get("limit"), 50),
+		Author:         request.URL.Query().Get("author"),
+		Participant:    request.URL.Query().Get("participant"),
+		ConversationId: request.URL.Query().Get("conversation_id"),
+		SessionMode:    sessionMode(request.URL.Query().Get("session_mode")),
+		EventKind:      eventKind(request.URL.Query().Get("event_kind")),
+	})
+	if err != nil {
+		writeRPCError(writer, err)
+		return
 	}
-	websocketConnection, err := server.upgrader.Upgrade(writer, request, responseHeader)
+	writeProto(writer, response)
+}
+
+func (server *Server) socket(writer http.ResponseWriter, request *http.Request) {
+	claims, err := server.sessions.Verify(request.URL.Query().Get("access_token"))
+	if err != nil {
+		writeJSON(writer, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		return
+	}
+	connection, err := server.upgrader.Upgrade(writer, request, nil)
 	if err != nil {
 		return
 	}
-	client := &client{connection: websocketConnection, outgoing: make(chan []byte, 64)}
-	connectionIdentity := connection.Identity{UserID: identity.UserID, DeviceID: identity.DeviceID}
-	if !server.registry.Register(connectionIdentity, client) {
-		websocketConnection.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "device connection limit reached"), time.Now().Add(writeTimeout))
-		websocketConnection.Close()
-		return
-	}
-	leaseContext, leaseCancel := context.WithTimeout(request.Context(), 3*time.Second)
-	err = server.fanout.Refresh(leaseContext, []connection.Identity{connectionIdentity})
-	leaseCancel()
-	if err != nil {
-		server.registry.Unregister(connectionIdentity, client)
-		client.Close()
-		return
-	}
+	current := &client{connection: connection, claims: claims, outgoing: make(chan []byte, 64)}
+	server.mutex.Lock()
+	server.clients[current] = struct{}{}
+	server.mutex.Unlock()
 	defer func() {
-		if server.registry.Unregister(connectionIdentity, client) == 0 {
-			releaseContext, releaseCancel := context.WithTimeout(context.Background(), 3*time.Second)
-			server.fanout.Release(releaseContext, connectionIdentity)
-			releaseCancel()
-		}
-		client.Close()
+		server.mutex.Lock()
+		delete(server.clients, current)
+		server.mutex.Unlock()
+		close(current.outgoing)
+		connection.Close()
 	}()
-	websocketConnection.SetReadLimit(maxFrameBytes)
-	websocketConnection.SetReadDeadline(time.Now().Add(pongWait))
-	websocketConnection.SetPongHandler(func(string) error {
-		return websocketConnection.SetReadDeadline(time.Now().Add(pongWait))
-	})
-	writerDone := make(chan struct{})
-	go func() {
-		server.writeLoop(client)
-		close(writerDone)
-	}()
-	server.sendSync(client, identity, "", "", 50, "synced")
+	go server.writeLoop(current)
+	server.enqueue(current, mustJSON(map[string]any{"type": "connected", "mode": claims.Mode, "warning": "SERVER IS LISTENING"}))
+	connection.SetReadLimit(1 << 20)
 	for {
-		messageType, payload, err := websocketConnection.ReadMessage()
-		if err != nil {
+		var value command
+		if err := connection.ReadJSON(&value); err != nil {
 			return
 		}
-		if messageType != websocket.TextMessage {
-			server.sendError(client, "", "invalid_frame", "text frames are required")
-			return
-		}
-		server.handleCommand(request.Context(), client, identity, payload)
-		select {
-		case <-writerDone:
-			return
-		default:
-		}
+		server.handle(current, value)
 	}
 }
 
-func (server *Server) handleCommand(ctx context.Context, client *client, identity auth.Identity, payload []byte) {
-	var header frameHeader
-	if json.Unmarshal(payload, &header) != nil || !validIdentity(header.RequestID) {
-		server.sendError(client, header.RequestID, "invalid_request", "invalid frame")
+func (server *Server) handle(current *client, value command) {
+	if value.ClientCommandID == "" {
+		server.error(current, value.ClientCommandID, "client_command_id is required")
 		return
 	}
-	switch header.Type {
+	requestContext, cancel := context.WithTimeout(context.Background(), server.timeout)
+	defer cancel()
+	switch value.Type {
 	case "send":
-		var command sendFrame
-		if decodeStrict(payload, &command) != nil {
-			server.sendError(client, header.RequestID, "invalid_request", "invalid send frame")
+		kind := knotv1.MessageKind_MESSAGE_KIND_TEXT
+		if value.AttachmentID != "" {
+			kind = knotv1.MessageKind_MESSAGE_KIND_ATTACHMENT
+		}
+		response, err := server.router.RouteCommand(requestContext, &knotv1.RouteCommandRequest{
+			ClientCommandId: value.ClientCommandID,
+			ConversationId:  value.ConversationID,
+			AuthorUserId:    current.claims.UserID,
+			AuthorUsername:  current.claims.Username,
+			SessionId:       current.claims.SessionID,
+			SessionMode:     protoSessionMode(current.claims.Mode),
+			Kind:            kind,
+			Text:            value.Text,
+			AttachmentId:    value.AttachmentID,
+			ReplyToId:       value.ReplyToID,
+			ForwardedFromId: value.ForwardedFromID,
+		})
+		if err != nil {
+			server.rpcError(current, value.ClientCommandID, err)
 			return
 		}
-		server.handleSend(ctx, client, identity, command)
-	case "sync":
-		var command syncFrame
-		if decodeStrict(payload, &command) != nil {
-			server.sendError(client, header.RequestID, "invalid_request", "invalid sync frame")
+		server.enqueue(current, mustJSON(map[string]any{"type": "ack", "client_command_id": value.ClientCommandID, "duplicate": response.Duplicate, "message": json.RawMessage(messageJSON(withClientHop(response.Message)))}))
+	case "edit", "delete", "react", "read":
+		eventRequest := &knotv1.ApplyEventRequest{
+			ClientCommandId:      value.ClientCommandID,
+			MessageId:            value.MessageID,
+			ActorUserId:          current.claims.UserID,
+			ActorUsername:        current.claims.Username,
+			SessionId:            current.claims.SessionID,
+			SessionMode:          protoSessionMode(current.claims.Mode),
+			OccurredAtUnixMillis: time.Now().UTC().UnixMilli(),
+		}
+		switch value.Type {
+		case "edit":
+			eventRequest.Kind = knotv1.MessageEventKind_MESSAGE_EVENT_KIND_EDIT
+			eventRequest.Text = value.Text
+		case "delete":
+			eventRequest.Kind = knotv1.MessageEventKind_MESSAGE_EVENT_KIND_DELETE
+		case "react":
+			eventRequest.Kind = knotv1.MessageEventKind_MESSAGE_EVENT_KIND_REACTION
+			eventRequest.Emoji = value.Emoji
+			eventRequest.Active = value.Active
+		case "read":
+			eventRequest.Kind = knotv1.MessageEventKind_MESSAGE_EVENT_KIND_RECEIPT
+			eventRequest.Text = "read"
+		}
+		response, err := server.delivery.ApplyEvent(requestContext, eventRequest)
+		if err != nil {
+			server.rpcError(current, value.ClientCommandID, err)
 			return
 		}
-		server.sendSync(client, identity, command.RequestID, command.Cursor, command.Limit, "synced")
-	case "ack":
-		var command ackFrame
-		if decodeStrict(payload, &command) != nil {
-			server.sendError(client, header.RequestID, "invalid_request", "invalid ack frame")
-			return
-		}
-		server.handleAck(ctx, client, identity, command)
+		server.enqueue(current, mustJSON(map[string]any{"type": "ack", "client_command_id": value.ClientCommandID, "duplicate": response.Duplicate, "message": json.RawMessage(messageJSON(response.Message))}))
 	default:
-		server.sendError(client, header.RequestID, "unsupported_type", "unsupported frame type")
+		server.error(current, value.ClientCommandID, "unknown command")
 	}
 }
 
-func (server *Server) handleSend(ctx context.Context, client *client, identity auth.Identity, command sendFrame) {
-	if !validIdentity(command.MessageID) || !validIdentity(command.RecipientUserID) || !validGroupMetadata(command.GroupID, command.GroupRevision) || len(command.Envelopes) == 0 || len(command.Envelopes) > maxEnvelopeCount {
-		server.sendError(client, command.RequestID, "invalid_request", "invalid send frame")
-		return
-	}
-	envelopes := make([]*knotv1.DeviceEnvelope, 0, len(command.Envelopes))
-	seen := make(map[string]struct{}, len(command.Envelopes))
-	total := 0
-	for _, value := range command.Envelopes {
-		ciphertext, err := decodeCiphertext(value.Ciphertext)
-		if err != nil || !validIdentity(value.RecipientDeviceID) || len(ciphertext) == 0 || len(ciphertext) > maxCiphertextBytes {
-			server.sendError(client, command.RequestID, "invalid_request", "invalid device envelope")
+func (server *Server) writeLoop(current *client) {
+	for payload := range current.outgoing {
+		current.connection.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if current.connection.WriteMessage(websocket.TextMessage, payload) != nil {
+			current.connection.Close()
 			return
 		}
-		if _, duplicate := seen[value.RecipientDeviceID]; duplicate {
-			server.sendError(client, command.RequestID, "invalid_request", "duplicate device envelope")
-			return
-		}
-		seen[value.RecipientDeviceID] = struct{}{}
-		total += len(ciphertext)
-		if total > 4<<20 {
-			server.sendError(client, command.RequestID, "invalid_request", "ciphertext limit exceeded")
-			return
-		}
-		envelopes = append(envelopes, &knotv1.DeviceEnvelope{RecipientDeviceId: value.RecipientDeviceID, Ciphertext: ciphertext})
 	}
-	requestContext, cancel := context.WithTimeout(ctx, server.rpcTimeout)
-	response, err := server.router.RouteMessage(requestContext, &knotv1.RouteMessageRequest{
-		MessageId:       command.MessageID,
-		SenderUserId:    identity.UserID,
-		SenderDeviceId:  identity.DeviceID,
-		RecipientUserId: command.RecipientUserID,
-		GroupId:         command.GroupID,
-		GroupRevision:   command.GroupRevision,
-		Envelopes:       envelopes,
-	})
-	cancel()
-	if err != nil {
-		server.sendRPCError(client, command.RequestID, err)
-		return
-	}
-	routes := make([]map[string]string, 0, len(response.GetRoutes()))
-	for _, route := range response.GetRoutes() {
-		kind := "queued"
-		if route.GetKind() == knotv1.RouteKind_ROUTE_KIND_LIVE {
-			kind = "live"
-		}
-		routes = append(routes, map[string]string{"recipient_device_id": route.GetRecipientDeviceId(), "kind": kind})
-	}
-	server.enqueueJSON(client, map[string]any{
-		"type":       "sent",
-		"request_id": command.RequestID,
-		"message_id": response.GetMessageId(),
-		"duplicate":  response.GetDuplicate(),
-		"routes":     routes,
-	})
 }
 
-func (server *Server) sendSync(client *client, identity auth.Identity, requestID string, cursor string, limit uint32, responseType string) {
-	requestContext, cancel := context.WithTimeout(context.Background(), server.rpcTimeout)
-	response, err := server.delivery.Sync(requestContext, &knotv1.SyncRequest{UserId: identity.UserID, DeviceId: identity.DeviceID, Cursor: cursor, Limit: limit})
-	cancel()
-	if err != nil {
-		if requestID != "" {
-			server.sendRPCError(client, requestID, err)
-		}
-		return
-	}
-	messages := make([]messageFrame, 0, len(response.GetMessages()))
-	for _, value := range response.GetMessages() {
-		messages = append(messages, wireMessage(value))
-	}
-	server.enqueueJSON(client, map[string]any{
-		"type":        responseType,
-		"request_id":  requestID,
-		"messages":    messages,
-		"next_cursor": response.GetNextCursor(),
-	})
-}
-
-func (server *Server) handleAck(ctx context.Context, client *client, identity auth.Identity, command ackFrame) {
-	if len(command.Acknowledgements) == 0 || len(command.Acknowledgements) > maxAcknowledgements {
-		server.sendError(client, command.RequestID, "invalid_request", "invalid acknowledgement frame")
-		return
-	}
-	values := make([]*knotv1.Acknowledgement, 0, len(command.Acknowledgements))
-	seen := make(map[string]struct{}, len(command.Acknowledgements))
-	for _, value := range command.Acknowledgements {
-		if !validIdentity(value.MessageID) || value.AckToken == "" || len(value.AckToken) > 2048 {
-			server.sendError(client, command.RequestID, "invalid_request", "invalid acknowledgement")
-			return
-		}
-		if _, duplicate := seen[value.MessageID]; duplicate {
-			server.sendError(client, command.RequestID, "invalid_request", "duplicate acknowledgement")
-			return
-		}
-		seen[value.MessageID] = struct{}{}
-		values = append(values, &knotv1.Acknowledgement{MessageId: value.MessageID, AckToken: value.AckToken})
-	}
-	requestContext, cancel := context.WithTimeout(ctx, server.rpcTimeout)
-	response, err := server.delivery.Acknowledge(requestContext, &knotv1.AcknowledgeRequest{UserId: identity.UserID, DeviceId: identity.DeviceID, Acknowledgements: values})
-	cancel()
-	if err != nil {
-		server.sendRPCError(client, command.RequestID, err)
-		return
-	}
-	server.enqueueJSON(client, map[string]any{"type": "acked", "request_id": command.RequestID, "acknowledged": response.GetAcknowledged()})
-}
-
-func (server *Server) liveSignal(ctx context.Context, envelope *knotv1.DeliveryEnvelope) {
+func (server *Server) enqueue(current *client, payload []byte) {
 	select {
-	case server.liveSlots <- struct{}{}:
-		go func() {
-			defer func() { <-server.liveSlots }()
-			server.syncLive(ctx, envelope.GetRecipientUserId(), envelope.GetRecipientDeviceId())
-		}()
+	case current.outgoing <- payload:
 	default:
+		current.connection.Close()
 	}
 }
 
-func (server *Server) syncLive(ctx context.Context, userID string, deviceID string) {
-	if !validIdentity(userID) || !validIdentity(deviceID) {
-		return
-	}
-	requestContext, cancel := context.WithTimeout(ctx, server.rpcTimeout)
-	response, err := server.delivery.Sync(requestContext, &knotv1.SyncRequest{UserId: userID, DeviceId: deviceID, Limit: 100})
-	cancel()
+func (server *Server) error(current *client, commandID string, message string) {
+	server.enqueue(current, mustJSON(map[string]string{"type": "error", "client_command_id": commandID, "error": message}))
+}
+
+func (server *Server) rpcError(current *client, commandID string, err error) {
+	server.error(current, commandID, status.Convert(err).Message())
+}
+
+func (server *Server) authenticate(writer http.ResponseWriter, request *http.Request) (session.Claims, bool) {
+	claims, err := server.sessions.Verify(session.Bearer(request.Header.Get("Authorization")))
 	if err != nil {
-		return
+		writeJSON(writer, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		return session.Claims{}, false
 	}
-	identity := connection.Identity{UserID: userID, DeviceID: deviceID}
-	for _, value := range response.GetMessages() {
-		payload, err := json.Marshal(map[string]any{"type": "message", "message": wireMessage(value)})
-		if err == nil {
-			server.registry.Publish(identity, payload)
-		}
-	}
+	return claims, true
 }
 
-func (server *Server) authenticate(request *http.Request) (auth.Identity, string, error) {
-	if authorization := request.Header.Get("Authorization"); authorization != "" {
-		identity, err := server.verifier.VerifyAuthorization(authorization)
-		return identity, "", err
-	}
-	protocols := websocket.Subprotocols(request)
-	selected := ""
-	for _, protocol := range protocols {
-		if !strings.HasPrefix(protocol, websocketJWTProtocolPrefix) {
-			continue
-		}
-		if selected != "" {
-			return auth.Identity{}, "", auth.ErrUnauthorized
-		}
-		selected = protocol
-	}
-	if selected == "" {
-		return auth.Identity{}, "", auth.ErrUnauthorized
-	}
-	identity, err := server.verifier.VerifyToken(strings.TrimPrefix(selected, websocketJWTProtocolPrefix))
-	return identity, selected, err
-}
-
-func (server *Server) checkOrigin(request *http.Request) bool {
-	return server.originPolicy.Allows(request)
-}
-
-func (server *Server) writeLoop(client *client) {
-	ticker := time.NewTicker(pingInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case payload := <-client.outgoing:
-			client.connection.SetWriteDeadline(time.Now().Add(writeTimeout))
-			if client.connection.WriteMessage(websocket.TextMessage, payload) != nil {
-				client.Close()
-				return
-			}
-		case <-ticker.C:
-			if client.connection.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeTimeout)) != nil {
-				client.Close()
-				return
-			}
-		}
-	}
-}
-
-func (client *client) Enqueue(payload []byte) bool {
-	select {
-	case client.outgoing <- payload:
-		return true
-	default:
-		return false
-	}
-}
-
-func (client *client) Close() {
-	client.closeOnce.Do(func() {
-		client.connection.Close()
-	})
-}
-
-func (server *Server) enqueueJSON(client *client, value any) {
-	payload, err := json.Marshal(value)
-	if err != nil || !client.Enqueue(payload) {
-		client.Close()
-	}
-}
-
-func (server *Server) sendError(client *client, requestID string, code string, message string) {
-	server.enqueueJSON(client, map[string]string{"type": "error", "request_id": requestID, "code": code, "message": message})
-}
-
-func (server *Server) sendRPCError(client *client, requestID string, err error) {
-	code := "unavailable"
-	message := "service temporarily unavailable"
+func writeRPCError(writer http.ResponseWriter, err error) {
 	switch status.Code(err) {
 	case codes.InvalidArgument:
-		code = "invalid_request"
-		message = "request rejected"
-	case codes.PermissionDenied, codes.Unauthenticated:
-		code = "permission_denied"
-		message = "request not permitted"
+		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": status.Convert(err).Message()})
+	case codes.PermissionDenied:
+		writeJSON(writer, http.StatusForbidden, map[string]string{"error": status.Convert(err).Message()})
 	case codes.NotFound:
-		code = "not_found"
-		message = "recipient not found"
-	case codes.FailedPrecondition, codes.Aborted:
-		code = "device_set_changed"
-		message = "recipient devices changed"
-	case codes.AlreadyExists:
-		code = "message_conflict"
-		message = "message identifier conflict"
-	}
-	server.sendError(client, requestID, code, message)
-}
-
-func wireMessage(value *knotv1.SyncedEnvelope) messageFrame {
-	envelope := value.GetEnvelope()
-	return messageFrame{
-		ID:                envelope.GetMessageId(),
-		MessageID:         envelope.GetMessageId(),
-		RecipientUserID:   envelope.GetRecipientUserId(),
-		RecipientDeviceID: envelope.GetRecipientDeviceId(),
-		SenderUserID:      envelope.GetSenderUserId(),
-		SenderUsername:    envelope.GetSenderUsername(),
-		SenderDeviceID:    envelope.GetSenderDeviceId(),
-		GroupID:           envelope.GetGroupId(),
-		GroupRevision:     envelope.GetGroupRevision(),
-		Ciphertext:        base64.RawStdEncoding.EncodeToString(envelope.GetCiphertext()),
-		CreatedAt:         time.UnixMilli(envelope.GetCreatedAtUnixMillis()).UTC().Format(time.RFC3339Nano),
-		Cursor:            value.GetCursor(),
-		AckToken:          value.GetAckToken(),
-		Redelivered:       value.GetRedelivered(),
+		writeJSON(writer, http.StatusNotFound, map[string]string{"error": status.Convert(err).Message()})
+	default:
+		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "realtime service unavailable"})
 	}
 }
 
-func validGroupMetadata(groupID string, revision uint64) bool {
-	if groupID == "" {
-		return revision == 0
+func writeProto(writer http.ResponseWriter, message proto.Message) {
+	payload, err := protojson.Marshal(message)
+	if err != nil {
+		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "response encoding failed"})
+		return
 	}
-	return validIdentity(groupID) && revision > 0 && revision <= maxGroupRevision
+	writer.Header().Set("Content-Type", "application/json")
+	writer.Write(payload)
 }
 
-func decodeCiphertext(value string) ([]byte, error) {
-	if decoded, err := base64.RawStdEncoding.DecodeString(value); err == nil {
-		return decoded, nil
-	}
-	if decoded, err := base64.StdEncoding.DecodeString(value); err == nil {
-		return decoded, nil
-	}
-	if decoded, err := base64.RawURLEncoding.DecodeString(value); err == nil {
-		return decoded, nil
-	}
-	return base64.URLEncoding.DecodeString(value)
-}
-
-func decodeStrict(payload []byte, destination any) error {
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return errors.New("multiple JSON values")
-	}
-	return nil
-}
-
-func validIdentity(value string) bool {
-	return value != "" && len(value) <= maxIdentityBytes && utf8.ValidString(value) && strings.TrimSpace(value) == value
-}
-
-func writeHTTP(writer http.ResponseWriter, status int, value any) {
+func writeJSON(writer http.ResponseWriter, status int, value any) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(status)
 	json.NewEncoder(writer).Encode(value)
+}
+
+func messageJSON(message *knotv1.Message) []byte {
+	payload, _ := protojson.Marshal(message)
+	return payload
+}
+
+func routeTraceJSON(message *knotv1.Message) []byte {
+	if message == nil {
+		return nil
+	}
+	traced := withClientHop(message)
+	return mustJSON(map[string]any{
+		"type":       "route_trace",
+		"message_id": traced.Id,
+		"route":      traced.Route,
+	})
+}
+
+func withClientHop(message *knotv1.Message) *knotv1.Message {
+	traced := proto.Clone(message).(*knotv1.Message)
+	traced.Route = append(traced.Route, &knotv1.RouteHop{
+		Service: "clients", Status: "received public event", OccurredAtUnixMillis: time.Now().UTC().UnixMilli(),
+	})
+	return traced
+}
+
+func mustJSON(value any) []byte {
+	payload, _ := json.Marshal(value)
+	return payload
+}
+
+func contains(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func uint64Value(value string) uint64 {
+	parsed, _ := strconv.ParseUint(value, 10, 64)
+	return parsed
+}
+
+func uint32Value(value string, fallback uint32) uint32 {
+	parsed, err := strconv.ParseUint(value, 10, 32)
+	if err != nil || parsed == 0 {
+		return fallback
+	}
+	return uint32(parsed)
+}
+
+func protoSessionMode(mode session.Mode) knotv1.SessionMode {
+	switch mode {
+	case session.PasswordMode:
+		return knotv1.SessionMode_SESSION_MODE_PASSWORD
+	case session.GuestMode:
+		return knotv1.SessionMode_SESSION_MODE_GUEST
+	case session.ImpersonatedMode:
+		return knotv1.SessionMode_SESSION_MODE_IMPERSONATED
+	default:
+		return knotv1.SessionMode_SESSION_MODE_UNSPECIFIED
+	}
+}
+
+func sessionMode(value string) knotv1.SessionMode {
+	return protoSessionMode(session.Mode(strings.ToLower(value)))
+}
+
+func eventKind(value string) knotv1.MessageEventKind {
+	switch strings.ToLower(value) {
+	case "create":
+		return knotv1.MessageEventKind_MESSAGE_EVENT_KIND_CREATE
+	case "edit":
+		return knotv1.MessageEventKind_MESSAGE_EVENT_KIND_EDIT
+	case "delete":
+		return knotv1.MessageEventKind_MESSAGE_EVENT_KIND_DELETE
+	case "reaction":
+		return knotv1.MessageEventKind_MESSAGE_EVENT_KIND_REACTION
+	case "receipt":
+		return knotv1.MessageEventKind_MESSAGE_EVENT_KIND_RECEIPT
+	default:
+		return knotv1.MessageEventKind_MESSAGE_EVENT_KIND_UNSPECIFIED
+	}
 }

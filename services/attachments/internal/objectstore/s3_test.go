@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const testCiphertextSHA256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const testSHA256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func TestPresignedUploadIsDeterministicAndBindsMetadata(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
@@ -27,11 +27,11 @@ func TestPresignedUploadIsDeterministicAndBindsMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := store.PresignUpload(context.Background(), "attachments/id", 42, testCiphertextSHA256, 15*time.Minute)
+	first, err := store.PresignUpload(context.Background(), "attachments/id", 42, testSHA256, 15*time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := store.PresignUpload(context.Background(), "attachments/id", 42, testCiphertextSHA256, 15*time.Minute)
+	second, err := store.PresignUpload(context.Background(), "attachments/id", 42, testSHA256, 15*time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestPresignedUploadIsDeterministicAndBindsMetadata(t *testing.T) {
 	if query.Get("X-Amz-SignedHeaders") != "content-length;host;x-amz-meta-sha256" {
 		t.Fatalf("unexpected signed headers: %s", query.Get("X-Amz-SignedHeaders"))
 	}
-	if first.Headers["Content-Length"] != "42" || first.Headers["X-Amz-Meta-Sha256"] != testCiphertextSHA256 || !first.ExpiresAt.Equal(now.Add(15*time.Minute)) {
+	if first.Headers["Content-Length"] != "42" || first.Headers["X-Amz-Meta-Sha256"] != testSHA256 || !first.ExpiresAt.Equal(now.Add(15*time.Minute)) {
 		t.Fatalf("unexpected upload request: %#v", first)
 	}
 }
@@ -63,7 +63,7 @@ func TestS3HeadDeleteAndReadinessAreSigned(t *testing.T) {
 		switch {
 		case request.Method == http.MethodHead && request.URL.Path == "/bucket/attachments/id":
 			writer.Header().Set("Content-Length", "42")
-			writer.Header().Set("X-Amz-Meta-Sha256", testCiphertextSHA256)
+			writer.Header().Set("X-Amz-Meta-Sha256", testSHA256)
 			writer.WriteHeader(http.StatusOK)
 		case request.Method == http.MethodDelete && request.URL.Path == "/bucket/attachments/id":
 			writer.WriteHeader(http.StatusNoContent)
@@ -82,7 +82,7 @@ func TestS3HeadDeleteAndReadinessAreSigned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Size != 42 || info.CiphertextSHA256 != testCiphertextSHA256 {
+	if info.Size != 42 || info.SHA256 != testSHA256 {
 		t.Fatalf("unexpected object info: %#v", info)
 	}
 	if err := store.Delete(context.Background(), "attachments/id"); err != nil {
@@ -104,7 +104,7 @@ func TestS3ConfigurationAndInputsAreStrict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.PresignUpload(context.Background(), "attachments/id", 0, testCiphertextSHA256, time.Minute); err == nil {
+	if _, err := store.PresignUpload(context.Background(), "attachments/id", 0, testSHA256, time.Minute); err == nil {
 		t.Fatal("expected invalid size rejection")
 	}
 	if _, err := store.PresignDownload(context.Background(), "/absolute", time.Minute); err == nil {

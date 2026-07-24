@@ -60,7 +60,7 @@ func TestS3CompatibleLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Size != int64(len(payload)) || info.CiphertextSHA256 != hash {
+	if info.Size != int64(len(payload)) || info.SHA256 != hash {
 		t.Fatalf("unexpected object info: %#v", info)
 	}
 	download, err := store.PresignDownload(context.Background(), objectKey, time.Minute)

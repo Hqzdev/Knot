@@ -7,8 +7,9 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("attachment not found")
-	ErrConflict = errors.New("attachment already exists")
+	ErrNotFound     = errors.New("attachment not found")
+	ErrConflict     = errors.New("attachment already exists")
+	ErrLegacySchema = errors.New("legacy attachment schema detected; reset PostgreSQL volumes before starting Knot Unsecure")
 )
 
 type Status string
@@ -20,16 +21,16 @@ const (
 )
 
 type Attachment struct {
-	ID               string
-	OwnerUserID      string
-	OwnerDeviceID    string
-	ObjectKey        string
-	CiphertextSize   int64
-	CiphertextSHA256 string
-	Status           Status
-	CreatedAt        time.Time
-	CompletedAt      *time.Time
-	ExpiresAt        time.Time
+	ID             string
+	OwnerUserID    string
+	OwnerSessionID string
+	ObjectKey      string
+	Size           int64
+	SHA256         string
+	Status         Status
+	CreatedAt      time.Time
+	CompletedAt    *time.Time
+	ExpiresAt      time.Time
 }
 
 type Store interface {

@@ -2,13 +2,8 @@
 **/.git
 .DS_Store
 target
-clients/apple/.build
-clients/apple/dist
-clients/apple/Knot/Frameworks
-clients/apple/**/xcuserdata
-clients/apple/**/*.xcuserstate
 clients/web/node_modules
 clients/web/dist
-clients/web/public/crypto
+clients/web/.next
 clients/web/*.tsbuildinfo
 coverage

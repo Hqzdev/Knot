@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650&display=swap" rel="stylesheet">
+<style>
+:root{
+--app-bg:#F4F5F7;--sidebar-bg:#ECEEF1;--surface:#FFFFFF;--surface-2:#F8F9FA;--hover:#F0F2F5;--active-item:#E7ECF8;--selected:#DCE5FA;
+--text:#17191C;--text-2:#656B73;--text-muted:#9298A1;--text-disabled:#B4B8BE;--on-accent:#FFFFFF;
+--border:#DDE0E4;--border-weak:#E8EAED;--border-active:#AFC3F2;--divider:rgba(23,25,28,0.08);
+--accent:#315FC4;--accent-hover:#2852AE;--accent-pressed:#214693;--accent-soft:#E8EEFC;--focus-ring:rgba(49,95,196,0.28);
+--success:#2F8F5B;--success-soft:#E7F5ED;--warning:#B7791F;--error:#C94343;--error-soft:#FBEAEA;
+--msg-in:#F0F1F3;--msg-out:#315FC4;--msg-in-text:#202226;--msg-out-text:#FFFFFF;--reply-in:#E2E5E9;--reply-out:rgba(255,255,255,0.14);
+--menu-shadow:0 8px 24px rgba(20,24,31,0.12);--modal-shadow:0 16px 48px rgba(20,24,31,0.16);
+--d-hover:110ms;--d-menu:140ms;--d-panel:200ms;
+}
+[data-theme="dark"]{
+--app-bg:#15171A;--sidebar-bg:#1A1D21;--surface:#202328;--surface-2:#25282E;--hover:#2B2F35;--active-item:#29344D;--selected:#29344D;
+--text:#F2F3F5;--text-2:#A8ADB5;--text-muted:#747B85;--text-disabled:#5A616B;--on-accent:#FFFFFF;
+--border:#34383F;--border-weak:#2C3036;--border-active:#3E69C7;--divider:rgba(255,255,255,0.08);
+--accent:#6F92E5;--accent-hover:#7f9fe9;--accent-pressed:#5f83de;--accent-soft:#26324b;--focus-ring:rgba(111,146,229,0.34);
+--success:#59B982;--success-soft:#1e3327;--warning:#d0a24a;--error:#E36B6B;--error-soft:#3a2626;
+--msg-in:#2C3036;--msg-out:#3E69C7;--msg-in-text:#F2F3F5;--msg-out-text:#FFFFFF;--reply-in:#3a3f47;--reply-out:rgba(255,255,255,0.16);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{font-family:'Inter','system-ui',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--app-bg);color:var(--text);-webkit-font-smoothing:antialiased;font-size:14px;}
+button{font:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer;}
+input,textarea{font:inherit;color:inherit;}
+a{color:var(--accent);text-decoration:none;}
+a:hover{color:var(--accent-hover);}
+*:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:6px;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;border:3px solid transparent;background-clip:content-box;}
+::-webkit-scrollbar-thumb:hover{background:var(--text-disabled);background-clip:content-box;}
+@keyframes knot-in{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+@keyframes knot-fade{from{opacity:0;}to{opacity:1;}}
+@keyframes knot-menu{from{opacity:0;transform:scale(0.97) translateY(-3px);}to{opacity:1;transform:none;}}
+@keyframes knot-panel{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}
+@keyframes knot-typing{0%,60%,100%{opacity:0.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-2px);}}
+@keyframes knot-toast{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+.knot-msg-in{animation:knot-in var(--d-hover) ease-out;}
+.knot-row:hover .knot-hover{opacity:1 !important;}
+.knot-navbtn:hover .knot-tip{opacity:1 !important;visibility:visible !important;}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important;}}
+</style>
+</helmet>
+<div data-theme="{{ theme }}" style="height:100vh;width:100%;display:flex;background:var(--app-bg);color:var(--text);overflow:hidden;" onClick="{{ onRootClick }}">
+
+  <nav aria-label="Основная навигация" style="{{ navRailStyle }}">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0;">
+      <div title="Knot" style="width:32px;height:32px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:10px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M7 8c3 0 3 8 6 8s3-8 6-8"/><path d="M17 8c-3 0-3 8-6 8"/></svg>
+      </div>
+      <button class="knot-navbtn" aria-label="Чаты" style="{{ navChatsStyle }}" onClick="{{ goChats }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-4.2-.9L3 20.5l1.5-4.3A8.4 8.4 0 1 1 21 11.5z"/></svg>
+        <span class="knot-tip" style="{{ tipStyle }}">Чаты</span>
+      </button>
+      <button class="knot-navbtn" aria-label="Контакты" style="{{ navContactsStyle }}" onClick="{{ goContacts }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-1.5A3.5 3.5 0 0 0 12.5 15h-5A3.5 3.5 0 0 0 4 18.5V20"/><circle cx="10" cy="8" r="3.2"/><path d="M20 20v-1.4a3.5 3.5 0 0 0-2.6-3.4M15 5.2A3.2 3.2 0 0 1 15 11"/></svg>
+        <span class="knot-tip" style="{{ tipStyle }}">Контакты</span>
+      </button>
+      <button class="knot-navbtn" aria-label="Звонки" style="{{ navCallsStyle }}" onClick="{{ goCalls }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4h-2A1.5 1.5 0 0 0 3 5.6C3.3 13 11 20.7 18.4 21a1.5 1.5 0 0 0 1.6-1.5v-2a1.5 1.5 0 0 0-1.3-1.5l-2.4-.3a1.5 1.5 0 0 0-1.3.5l-.9 1a12 12 0 0 1-4.6-4.6l1-.9a1.5 1.5 0 0 0 .5-1.3l-.3-2.4A1.5 1.5 0 0 0 8.7 4z"/></svg>
+        <span class="knot-tip" style="{{ tipStyle }}">Звонки</span>
+      </button>
+      <button class="knot-navbtn" aria-label="Сохранённые" style="{{ navSavedStyle }}" onClick="{{ goSaved }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12a1 1 0 0 1 1 1v15l-7-4-7 4V5a1 1 0 0 1 1-1z"/></svg>
+        <span class="knot-tip" style="{{ tipStyle }}">Сохранённые</span>
+      </button>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 0;">
+      <div style="width:32px;height:1px;background:var(--divider);"></div>
+      <button class="knot-navbtn" aria-label="Настройки" style="{{ navSettingsStyle }}" onClick="{{ openSettings }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a1.9 1.9 0 0 1-3.8 0v-.1A1.6 1.6 0 0 0 7 19.3a1.6 1.6 0 0 0-1.8.3l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1A1.6 1.6 0 0 0 3.6 14a1.6 1.6 0 0 0-1.5-1H2a1.9 1.9 0 0 1 0-3.8h.1A1.6 1.6 0 0 0 3.7 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1A1.6 1.6 0 0 0 9 3.6a1.6 1.6 0 0 0 1-1.5V2a1.9 1.9 0 0 1 3.8 0v.1A1.6 1.6 0 0 0 17 3.7a1.6 1.6 0 0 0 1.8-.3l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.2a1.9 1.9 0 0 1 0 3.8h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+        <span class="knot-tip" style="{{ tipStyle }}">Настройки</span>
+      </button>
+      <button aria-label="Профиль" onClick="{{ openSettings }}" style="width:34px;height:34px;border-radius:50%;background:#8A5CF0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;">Я</button>
+    </div>
+  </nav>
+
+  <aside aria-label="Список чатов" style="{{ listColStyle }}">
+    <div style="padding:14px 16px 8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;height:28px;margin-bottom:12px;">
+        <h1 style="margin:0;font-size:17px;font-weight:650;letter-spacing:-0.01em;">{{ listTitle }}</h1>
+        <button aria-label="Новый чат" title="Новый чат" onClick="{{ openNewChat }}" style="width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--text-2);transition:background var(--d-hover);" style-hover="background:var(--hover);color:var(--text);">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <div style="position:relative;margin-bottom:4px;">
+        <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+        <input aria-label="Поиск" placeholder="Поиск" value="{{ search }}" onInput="{{ onSearch }}" style="width:100%;height:36px;padding:0 42px 0 32px;border-radius:9px;border:1px solid var(--border-weak);background:var(--surface-2);color:var(--text);font-size:13px;transition:border var(--d-hover),background var(--d-hover);" style-focus="border-color:var(--border-active);background:var(--surface);outline:none;">
+        <span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);display:flex;gap:3px;color:var(--text-muted);font-size:11px;font-weight:500;">
+          <kbd style="padding:2px 5px;border:1px solid var(--border);border-radius:5px;background:var(--surface);line-height:1;">⌘K</kbd>
+        </span>
+      </div>
+    </div>
+
+    <sc-if value="{{ showChatChrome }}" hint-placeholder-val="{{ true }}">
+    <div role="tablist" aria-label="Фильтр чатов" style="display:flex;gap:18px;padding:0 18px;border-bottom:1px solid var(--divider);">
+      <button role="tab" aria-selected="{{ tabAllSel }}" onClick="{{ filterAll }}" style="{{ tabAllStyle }}">Все</button>
+      <button role="tab" aria-selected="{{ tabDmSel }}" onClick="{{ filterDm }}" style="{{ tabDmStyle }}">Личные</button>
+      <button role="tab" aria-selected="{{ tabGrpSel }}" onClick="{{ filterGrp }}" style="{{ tabGrpStyle }}">Группы</button>
+    </div>
+    </sc-if>
+
+    <div style="flex:1;overflow-y:auto;padding:6px 8px 12px;">
+      <sc-if value="{{ listEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px 24px;text-align:center;color:var(--text-muted);">
+          <div style="width:44px;height:44px;border-radius:12px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;margin-bottom:14px;color:var(--text-disabled);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+          </div>
+          <div style="font-size:14px;font-weight:550;color:var(--text-2);margin-bottom:4px;">{{ emptyTitle }}</div>
+          <div style="font-size:13px;line-height:18px;max-width:220px;">{{ emptyDesc }}</div>
+        </div>
+      </sc-if>
+      <sc-for list="{{ pinnedChats }}" as="c" hint-placeholder-count="2">
+        <button class="knot-row" onClick="{{ c.select }}" style="{{ c.rowStyle }}">
+          <div style="position:relative;flex-shrink:0;">
+            <div style="{{ c.avatarStyle }}">{{ c.avatarText }}</div>
+            <sc-if value="{{ c.online }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:var(--success);border:2px solid var(--surface);"></span></sc-if>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+              <sc-if value="{{ c.pinned }}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="color:var(--text-muted);flex-shrink:0;"><path d="M14 3l7 7-3 1-2 5-4-4-5 5-1-1 5-5-4-4 5-2z"/></svg></sc-if>
+              <span style="{{ c.nameStyle }}">{{ c.name }}</span>
+              <sc-if value="{{ c.muted }}" hint-placeholder-val="{{ false }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="color:var(--text-muted);flex-shrink:0;"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M3 3l18 18"/></svg></sc-if>
+              <span style="margin-left:auto;font-size:11px;font-weight:450;color:{{ c.timeColor }};flex-shrink:0;">{{ c.time }}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <sc-if value="{{ c.hasStatus }}" hint-placeholder-val="{{ false }}"><span style="{{ c.statusStyle }}">{{ c.statusIcon }}</span></sc-if>
+              <span style="{{ c.previewStyle }}">{{ c.preview }}</span>
+              <sc-if value="{{ c.unread }}" hint-placeholder-val="{{ false }}"><span style="{{ c.badgeStyle }}">{{ c.unreadCount }}</span></sc-if>
+            </div>
+          </div>
+        </button>
+      </sc-for>
+      <sc-for list="{{ chats }}" as="c" hint-placeholder-count="6">
+        <button class="knot-row" onClick="{{ c.select }}" style="{{ c.rowStyle }}">
+          <div style="position:relative;flex-shrink:0;">
+            <div style="{{ c.avatarStyle }}">{{ c.avatarText }}</div>
+            <sc-if value="{{ c.online }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:var(--success);border:2px solid var(--surface);"></span></sc-if>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+              <span style="{{ c.nameStyle }}">{{ c.name }}</span>
+              <sc-if value="{{ c.muted }}" hint-placeholder-val="{{ false }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="color:var(--text-muted);flex-shrink:0;"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M3 3l18 18"/></svg></sc-if>
+              <span style="margin-left:auto;font-size:11px;font-weight:450;color:{{ c.timeColor }};flex-shrink:0;">{{ c.time }}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <sc-if value="{{ c.hasDraft }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--error);font-weight:500;flex-shrink:0;">Черновик:</span></sc-if>
+              <sc-if value="{{ c.hasStatus }}" hint-placeholder-val="{{ false }}"><span style="{{ c.statusStyle }}">{{ c.statusIcon }}</span></sc-if>
+              <span style="{{ c.previewStyle }}">{{ c.preview }}</span>
+              <sc-if value="{{ c.unread }}" hint-placeholder-val="{{ false }}"><span style="{{ c.badgeStyle }}">{{ c.unreadCount }}</span></sc-if>
+            </div>
+          </div>
+        </button>
+      </sc-for>
+    </div>
+  </aside>
+
+  <main style="{{ convColStyle }}">
+   <sc-if value="{{ hasActive }}" hint-placeholder-val="{{ true }}">
+    <header style="height:60px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--divider);background:var(--surface);">
+      <button aria-label="Назад" onClick="{{ mobileBack }}" style="{{ backBtnStyle }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <button onClick="{{ toggleInfo }}" style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;text-align:left;">
+        <div style="position:relative;flex-shrink:0;"><div style="{{ headAvatarStyle }}">{{ activeAvatar }}</div>
+          <sc-if value="{{ activeOnline }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;background:var(--success);border:2px solid var(--surface);"></span></sc-if>
+        </div>
+        <div style="min-width:0;">
+          <div style="font-size:15px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ activeName }}</div>
+          <div style="font-size:12px;line-height:16px;color:{{ activeStatusColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ activeStatus }}</div>
+        </div>
+      </button>
+      <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;">
+        <button aria-label="Поиск в чате" title="Поиск" style="{{ ghostIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg></button>
+        <button aria-label="Аудиозвонок" title="Аудиозвонок" onClick="{{ callToast }}" style="{{ ghostIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4h-2A1.5 1.5 0 0 0 3 5.6C3.3 13 11 20.7 18.4 21a1.5 1.5 0 0 0 1.6-1.5v-2a1.5 1.5 0 0 0-1.3-1.5l-2.4-.3a1.5 1.5 0 0 0-1.3.5l-.9 1a12 12 0 0 1-4.6-4.6l1-.9a1.5 1.5 0 0 0 .5-1.3l-.3-2.4A1.5 1.5 0 0 0 8.7 4z"/></svg></button>
+        <button aria-label="Видеозвонок" title="Видеозвонок" onClick="{{ callToast }}" style="{{ ghostIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 8.5 21 5v14l-6-3.5"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg></button>
+        <button aria-label="Информация" title="Информация" onClick="{{ toggleInfo }}" style="{{ infoBtnStyle }}" style-hover="background:var(--hover);"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.6" r="0.6" fill="currentColor"/></svg></button>
+        <button aria-label="Ещё" title="Ещё" onClick="{{ openHeaderMenu }}" style="{{ ghostIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+      </div>
+    </header>
+
+    <div style="{{ msgScrollStyle }}" ref="{{ setScrollRef }}">
+      <div style="max-width:900px;margin:0 auto;padding:20px 32px 8px;">
+        <sc-for list="{{ items }}" as="m" hint-placeholder-count="6">
+          <sc-if value="{{ m.isDate }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;justify-content:center;margin:16px 0 12px;"><span style="font-size:12px;font-weight:500;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border-weak);padding:3px 12px;border-radius:12px;">{{ m.label }}</span></div>
+          </sc-if>
+          <sc-if value="{{ m.isSystem }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:8px 0;color:var(--text-muted);font-size:12px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4h-2A1.5 1.5 0 0 0 3 5.6C3.3 13 11 20.7 18.4 21a1.5 1.5 0 0 0 1.6-1.5v-2a1.5 1.5 0 0 0-1.3-1.5l-2.4-.3a1.5 1.5 0 0 0-1.3.5l-.9 1a12 12 0 0 1-4.6-4.6"/></svg>
+              {{ m.text }}
+            </div>
+          </sc-if>
+          <sc-if value="{{ m.isMsg }}" hint-placeholder-val="{{ true }}">
+            <div class="knot-row knot-msg-in" style="{{ m.rowStyle }}" onContextMenu="{{ m.onMenu }}">
+              <sc-if value="{{ m.showAvatarSlot }}" hint-placeholder-val="{{ true }}">
+                <div style="width:30px;flex-shrink:0;align-self:flex-end;">
+                  <sc-if value="{{ m.showAvatar }}" hint-placeholder-val="{{ false }}"><div style="{{ m.avatarStyle }}">{{ m.avatarText }}</div></sc-if>
+                </div>
+              </sc-if>
+              <div style="{{ m.colStyle }}">
+                <sc-if value="{{ m.showName }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:600;color:{{ m.nameColor }};margin:0 2px 3px;">{{ m.authorName }}</span></sc-if>
+                <div style="{{ m.bubbleStyle }}">
+                  <sc-if value="{{ m.hasReply }}" hint-placeholder-val="{{ false }}">
+                    <div style="{{ m.replyStyle }}"><span style="font-size:12px;font-weight:600;color:{{ m.replyAccent }};">{{ m.replyAuthor }}</span><span style="font-size:13px;color:{{ m.replyTextColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;">{{ m.replyText }}</span></div>
+                  </sc-if>
+                  <sc-if value="{{ m.isImage }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ m.openImg }}" style="display:block;width:280px;max-width:100%;height:190px;border-radius:9px;overflow:hidden;margin-bottom:2px;">
+                      <image-slot id="{{ m.imgId }}" shape="rounded" radius="9" style="width:100%;height:100%;" placeholder="изображение"></image-slot>
+                    </button>
+                  </sc-if>
+                  <sc-if value="{{ m.isVoice }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;gap:10px;min-width:200px;padding:2px 0;">
+                      <button aria-label="Воспроизвести" style="{{ m.voiceBtnStyle }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+                      <div style="flex:1;display:flex;align-items:center;gap:2px;height:22px;">
+                        <sc-for list="{{ m.waveform }}" as="h" hint-placeholder-count="20"><span style="width:2px;border-radius:2px;height:{{ h.h }};background:{{ m.waveColor }};"></span></sc-for>
+                      </div>
+                      <span style="font-size:11px;color:{{ m.metaColor }};flex-shrink:0;">{{ m.voiceDur }}</span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.isDoc }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;gap:12px;min-width:210px;padding:2px 0;">
+                      <div style="{{ m.docIconStyle }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></div>
+                      <div style="min-width:0;"><div style="font-size:13px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ m.docName }}</div><div style="font-size:11px;color:{{ m.metaColor }};">{{ m.docMeta }}</div></div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.isLink }}" hint-placeholder-val="{{ false }}">
+                    <a href="#" onClick="{{ m.noop }}" style="display:block;border-left:3px solid {{ m.linkAccent }};padding:2px 0 2px 10px;margin-bottom:4px;text-decoration:none;">
+                      <span style="display:block;font-size:12px;color:{{ m.metaColor }};">{{ m.linkHost }}</span>
+                      <span style="display:block;font-size:13px;font-weight:600;color:{{ m.linkTitleColor }};">{{ m.linkTitle }}</span>
+                      <span style="display:block;font-size:12px;color:{{ m.linkDescColor }};line-height:16px;">{{ m.linkDesc }}</span>
+                    </a>
+                  </sc-if>
+                  <sc-if value="{{ m.hasText }}" hint-placeholder-val="{{ true }}">
+                    <span style="{{ m.textStyle }}">{{ m.text }}</span>
+                  </sc-if>
+                  <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:2px;float:right;margin-left:10px;">
+                    <sc-if value="{{ m.edited }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;color:{{ m.metaColor }};">изменено</span></sc-if>
+                    <span style="font-size:11px;color:{{ m.metaColor }};">{{ m.time }}</span>
+                    <sc-if value="{{ m.showStatus }}" hint-placeholder-val="{{ false }}"><span style="{{ m.statusColor }};display:flex;">{{ m.statusIcon }}</span></sc-if>
+                  </div>
+                </div>
+                <sc-if value="{{ m.hasReactions }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;gap:4px;margin:5px 2px 0;{{ m.reactAlign }}">
+                    <sc-for list="{{ m.reactions }}" as="r" hint-placeholder-count="2">
+                      <button onClick="{{ r.toggle }}" style="{{ r.style }}">{{ r.emoji }} {{ r.count }}</button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <div class="knot-hover" style="{{ m.actionsStyle }}">
+                  <button aria-label="Реакция" onClick="{{ m.react }}" style="{{ actIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.5 3.5 1.5 3.5-1.5 3.5-1.5"/><circle cx="9" cy="10" r="0.6" fill="currentColor"/><circle cx="15" cy="10" r="0.6" fill="currentColor"/></svg></button>
+                  <button aria-label="Ответить" onClick="{{ m.reply }}" style="{{ actIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v2"/></svg></button>
+                  <button aria-label="Переслать" onClick="{{ m.forward }}" style="{{ actIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0-6 6v2"/></svg></button>
+                  <button aria-label="Ещё" onClick="{{ m.onMenu }}" style="{{ actIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </sc-for>
+        <sc-if value="{{ showTyping }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:flex-end;gap:8px;margin-top:14px;">
+            <div style="width:30px;"></div>
+            <div style="background:var(--msg-in);border-radius:14px;border-bottom-left-radius:5px;padding:11px 14px;display:flex;gap:4px;align-items:center;">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--text-muted);animation:knot-typing 1.2s infinite;"></span>
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--text-muted);animation:knot-typing 1.2s infinite 0.2s;"></span>
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--text-muted);animation:knot-typing 1.2s infinite 0.4s;"></span>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="flex-shrink:0;padding:10px 32px 16px;background:var(--surface);position:relative;">
+      <div style="max-width:900px;margin:0 auto;">
+        <sc-if value="{{ replyBar }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:9px 9px 0 0;background:var(--surface-2);border:1px solid var(--border-weak);border-bottom:none;">
+            <div style="width:3px;align-self:stretch;background:var(--accent);border-radius:2px;"></div>
+            <div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--accent);">{{ composeCtxTitle }}</div><div style="font-size:13px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ composeCtxText }}</div></div>
+            <button aria-label="Отменить" onClick="{{ clearCompose }}" style="{{ ghostIcon }}" style-hover="background:var(--hover);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+        </sc-if>
+        <div style="{{ composerStyle }}">
+          <button aria-label="Прикрепить" title="Прикрепить файл" onClick="{{ attachToast }}" style="{{ composerIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11l-8.5 8.5a4.5 4.5 0 0 1-6.4-6.4L14 5a3 3 0 0 1 4.2 4.2l-8.5 8.5a1.5 1.5 0 0 1-2.1-2.1L15 8"/></svg></button>
+          <textarea aria-label="Написать сообщение" placeholder="Написать сообщение…" value="{{ draft }}" onInput="{{ onDraft }}" onKeyDown="{{ onComposerKey }}" rows="1" style="flex:1;resize:none;border:none;background:none;outline:none;font-size:14px;line-height:20px;color:var(--text);max-height:140px;padding:2px 0;align-self:center;"></textarea>
+          <button aria-label="Эмодзи" title="Эмодзи" onClick="{{ emojiToast }}" style="{{ composerIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.7 3.5 1.7 3.5-1.7 3.5-1.7" stroke-linecap="round"/><circle cx="9" cy="10" r="0.7" fill="currentColor"/><circle cx="15" cy="10" r="0.7" fill="currentColor"/></svg></button>
+          <sc-if value="{{ hasDraftText }}" hint-placeholder-val="{{ false }}">
+            <button aria-label="Отправить" title="Отправить" onClick="{{ send }}" style="width:36px;height:36px;border-radius:8px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background var(--d-hover);" style-hover="background:var(--accent-hover);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg></button>
+          </sc-if>
+          <sc-if value="{{ noDraftText }}" hint-placeholder-val="{{ true }}">
+            <button aria-label="Голосовое сообщение" title="Голосовое сообщение" onClick="{{ voiceToast }}" style="{{ composerIcon }}" style-hover="background:var(--hover);color:var(--text);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3"/></svg></button>
+          </sc-if>
+        </div>
+      </div>
+      <sc-if value="{{ dragOver }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;background:var(--accent-soft);border:2px dashed var(--accent);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:550;color:var(--accent);">Отпустите файлы, чтобы отправить</div>
+      </sc-if>
+    </div>
+   </sc-if>
+   <sc-if value="{{ noActive }}" hint-placeholder-val="{{ false }}">
+     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;">
+       <div style="width:56px;height:56px;border-radius:16px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;margin-bottom:18px;color:var(--text-disabled);">
+         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-4.2-.9L3 20.5l1.5-4.3A8.4 8.4 0 1 1 21 11.5z"/></svg>
+       </div>
+       <div style="font-size:16px;font-weight:600;margin-bottom:6px;">Выберите чат</div>
+       <div style="font-size:13px;color:var(--text-2);max-width:280px;line-height:19px;">Откройте существующий диалог слева или начните новый разговор.</div>
+     </div>
+   </sc-if>
+  </main>
+
+  <sc-if value="{{ infoOpen }}" hint-placeholder-val="{{ false }}">
+    <aside aria-label="Информация о чате" style="{{ infoPanelStyle }}">
+      <div style="height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 20px;border-bottom:1px solid var(--divider);">
+        <span style="font-size:14px;font-weight:600;">Информация</span>
+        <button aria-label="Закрыть" onClick="{{ toggleInfo }}" style="{{ ghostIcon }}" style-hover="background:var(--hover);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div style="flex:1;overflow-y:auto;">
+        <div style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:24px 20px 20px;border-bottom:1px solid var(--divider);">
+          <div style="width:72px;height:72px;border-radius:50%;background:{{ activeAvatarColor }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600;margin-bottom:12px;">{{ activeAvatar }}</div>
+          <div style="font-size:18px;line-height:24px;font-weight:650;">{{ activeName }}</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:2px;">{{ activeUsername }}</div>
+          <div style="font-size:13px;color:{{ activeStatusColor }};margin-top:6px;">{{ activeStatus }}</div>
+          <div style="display:flex;gap:8px;margin-top:16px;width:100%;">
+            <button onClick="{{ callToast }}" style="{{ infoActionStyle }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4h-2A1.5 1.5 0 0 0 3 5.6C3.3 13 11 20.7 18.4 21a1.5 1.5 0 0 0 1.6-1.5v-2a1.5 1.5 0 0 0-1.3-1.5l-2.4-.3a1.5 1.5 0 0 0-1.3.5l-.9 1a12 12 0 0 1-4.6-4.6l1-.9a1.5 1.5 0 0 0 .5-1.3l-.3-2.4A1.5 1.5 0 0 0 8.7 4z"/></svg><span style="font-size:12px;">Аудио</span></button>
+            <button onClick="{{ callToast }}" style="{{ infoActionStyle }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 8.5 21 5v14l-6-3.5"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg><span style="font-size:12px;">Видео</span></button>
+            <button onClick="{{ callToast }}" style="{{ infoActionStyle }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg><span style="font-size:12px;">Поиск</span></button>
+          </div>
+        </div>
+        <div style="padding:16px 20px;border-bottom:1px solid var(--divider);">
+          <div style="font-size:11px;line-height:14px;font-weight:650;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:8px;">О чате</div>
+          <div style="font-size:13px;line-height:19px;color:var(--text-2);">{{ activeAbout }}</div>
+        </div>
+        <div style="padding:14px 20px;border-bottom:1px solid var(--divider);display:flex;flex-direction:column;gap:2px;">
+          <button style="{{ infoRowStyle }}" style-hover="background:var(--hover);"><span style="display:flex;align-items:center;gap:12px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Файлы</span><span style="color:var(--text-muted);font-size:13px;">24</span></button>
+          <button style="{{ infoRowStyle }}" style-hover="background:var(--hover);"><span style="display:flex;align-items:center;gap:12px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>Медиа</span><span style="color:var(--text-muted);font-size:13px;">58</span></button>
+          <button style="{{ infoRowStyle }}" style-hover="background:var(--hover);"><span style="display:flex;align-items:center;gap:12px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a4 4 0 0 0 5.7 0l3-3a4 4 0 1 0-5.7-5.7l-1.5 1.5"/><path d="M14 11a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1.5-1.5"/></svg>Ссылки</span><span style="color:var(--text-muted);font-size:13px;">12</span></button>
+        </div>
+        <div style="padding:14px 20px;border-bottom:1px solid var(--divider);">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;">
+            <div style="display:flex;flex-direction:column;"><span style="font-size:14px;">Уведомления</span><span style="font-size:12px;color:var(--text-muted);">Звук и превью</span></div>
+            <button role="switch" aria-checked="{{ notifyOn }}" aria-label="Уведомления" onClick="{{ toggleNotify }}" style="{{ switchTrackStyle }}"><span style="{{ switchThumbStyle }}"></span></button>
+          </div>
+        </div>
+        <div style="padding:14px 20px;">
+          <button onClick="{{ dangerToast }}" style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:var(--error);font-size:14px;font-weight:500;transition:background var(--d-hover);" style-hover="background:var(--error-soft);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/><path d="M13 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7"/></svg>
+            {{ dangerLabel }}
+          </button>
+        </div>
+      </div>
+    </aside>
+  </sc-if>
+
+  <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:60;" onClick="{{ closeMenu }}">
+      <div role="menu" style="{{ menuStyle }}" onClick="{{ stop }}">
+        <button role="menuitem" onClick="{{ menuReply }}" style="{{ menuItem }}" style-hover="background:var(--hover);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v2"/></svg>Ответить</button>
+        <button role="menuitem" onClick="{{ menuCopy }}" style="{{ menuItem }}" style-hover="background:var(--hover);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Копировать</button>
+        <button role="menuitem" onClick="{{ menuForward }}" style="{{ menuItem }}" style-hover="background:var(--hover);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0-6 6v2"/></svg>Переслать</button>
+        <sc-if value="{{ menuCanEdit }}" hint-placeholder-val="{{ false }}"><button role="menuitem" onClick="{{ menuEdit }}" style="{{ menuItem }}" style-hover="background:var(--hover);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Изменить</button></sc-if>
+        <div style="height:1px;background:var(--divider);margin:4px 0;"></div>
+        <button role="menuitem" onClick="{{ menuDelete }}" style="{{ menuItemDanger }}" style-hover="background:var(--error-soft);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14"/></svg>Удалить</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ reactOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:60;" onClick="{{ closeReact }}">
+      <div style="{{ reactPickerStyle }}" onClick="{{ stop }}">
+        <sc-for list="{{ reactChoices }}" as="e" hint-placeholder-count="6"><button onClick="{{ e.pick }}" style="width:34px;height:34px;border-radius:8px;font-size:20px;display:flex;align-items:center;justify-content:center;transition:transform var(--d-hover),background var(--d-hover);" style-hover="background:var(--hover);transform:scale(1.15);">{{ e.emoji }}</button></sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ imgOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:70;background:rgba(10,12,16,0.82);display:flex;align-items:center;justify-content:center;padding:40px;animation:knot-fade var(--d-menu) ease-out;" onClick="{{ closeImage }}">
+      <button aria-label="Закрыть" onClick="{{ closeImage }}" style="position:absolute;top:20px;right:24px;width:40px;height:40px;border-radius:8px;color:#fff;display:flex;align-items:center;justify-content:center;" style-hover="background:rgba(255,255,255,0.12);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <div onClick="{{ stop }}" style="max-width:80vw;max-height:80vh;width:640px;height:440px;border-radius:12px;overflow:hidden;background:#222;">
+        <image-slot id="knot-preview-img" shape="rounded" radius="12" style="width:100%;height:100%;" placeholder="изображение"></image-slot>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:80;background:rgba(10,12,16,0.4);display:flex;align-items:center;justify-content:center;padding:24px;animation:knot-fade var(--d-menu) ease-out;" onClick="{{ closeModal }}">
+      <div role="dialog" aria-modal="true" onClick="{{ stop }}" style="width:100%;max-width:{{ modalWidth }};background:var(--surface);border-radius:14px;box-shadow:var(--modal-shadow);animation:knot-in var(--d-menu) ease-out;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 12px;">
+          <h2 style="margin:0;font-size:16px;font-weight:650;">{{ modalTitle }}</h2>
+          <button aria-label="Закрыть" onClick="{{ closeModal }}" style="{{ ghostIcon }}" style-hover="background:var(--hover);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </div>
+        <sc-if value="{{ isNewChat }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:0 20px 8px;">
+            <div style="position:relative;margin-bottom:6px;">
+              <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+              <input autofocus aria-label="Поиск людей" placeholder="Кому написать" style="width:100%;height:38px;padding:0 12px 0 32px;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);font-size:14px;" style-focus="border-color:var(--border-active);background:var(--surface);outline:none;">
+            </div>
+          </div>
+          <div style="max-height:300px;overflow-y:auto;padding:4px 12px 12px;">
+            <sc-for list="{{ contactChoices }}" as="p" hint-placeholder-count="5">
+              <button onClick="{{ p.start }}" style="width:100%;display:flex;align-items:center;gap:12px;padding:9px 10px;border-radius:8px;text-align:left;transition:background var(--d-hover);" style-hover="background:var(--hover);">
+                <div style="width:38px;height:38px;border-radius:50%;background:{{ p.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0;">{{ p.avatar }}</div>
+                <div style="min-width:0;"><div style="font-size:14px;font-weight:550;">{{ p.name }}</div><div style="font-size:12px;color:var(--text-muted);">{{ p.sub }}</div></div>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:4px 20px 20px;">
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 0 16px;border-bottom:1px solid var(--divider);margin-bottom:8px;">
+              <div style="width:56px;height:56px;border-radius:50%;background:#8A5CF0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;">Я</div>
+              <div><div style="font-size:16px;font-weight:600;">Ирина Соколова</div><div style="font-size:13px;color:var(--text-muted);">@irina</div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--divider);">
+              <div><div style="font-size:14px;">Тёмная тема</div><div style="font-size:12px;color:var(--text-muted);">Переключить оформление</div></div>
+              <button role="switch" aria-checked="{{ isDark }}" aria-label="Тёмная тема" onClick="{{ toggleTheme }}" style="{{ themeSwitchTrack }}"><span style="{{ themeSwitchThumb }}"></span></button>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+              <div><div style="font-size:14px;">Звук уведомлений</div><div style="font-size:12px;color:var(--text-muted);">При новых сообщениях</div></div>
+              <button role="switch" aria-checked="{{ notifyOn }}" aria-label="Звук уведомлений" onClick="{{ toggleNotify }}" style="{{ switchTrackStyle }}"><span style="{{ switchThumbStyle }}"></span></button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <button aria-label="Переключить тему" title="Переключить тему" onClick="{{ toggleTheme }}" style="{{ themeToggleStyle }}" style-hover="background:var(--hover);">
+    <sc-if value="{{ isDark }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></sc-if>
+    <sc-if value="{{ isLight }}" hint-placeholder-val="{{ true }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></sc-if>
+  </button>
+
+  <nav aria-label="Мобильная навигация" style="{{ mobileNavStyle }}">
+    <button onClick="{{ goChats }}" style="{{ mChatsStyle }}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-4.2-.9L3 20.5l1.5-4.3A8.4 8.4 0 1 1 21 11.5z"/></svg><span style="font-size:10px;">Чаты</span></button>
+    <button onClick="{{ goContacts }}" style="{{ mContactsStyle }}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-1.5A3.5 3.5 0 0 0 12.5 15h-5A3.5 3.5 0 0 0 4 18.5V20"/><circle cx="10" cy="8" r="3.2"/></svg><span style="font-size:10px;">Контакты</span></button>
+    <button onClick="{{ goCalls }}" style="{{ mCallsStyle }}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4h-2A1.5 1.5 0 0 0 3 5.6C3.3 13 11 20.7 18.4 21a1.5 1.5 0 0 0 1.6-1.5v-2a1.5 1.5 0 0 0-1.3-1.5l-2.4-.3a1.5 1.5 0 0 0-1.3.5l-.9 1a12 12 0 0 1-4.6-4.6l1-.9a1.5 1.5 0 0 0 .5-1.3l-.3-2.4A1.5 1.5 0 0 0 8.7 4z"/></svg><span style="font-size:10px;">Звонки</span></button>
+    <button onClick="{{ openSettings }}" style="{{ mSettingsStyle }}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8M4.6 9a1.6 1.6 0 0 0-.3-1.8"/><circle cx="12" cy="12" r="9"/></svg><span style="font-size:10px;">Ещё</span></button>
+  </nav>
+
+  <sc-if value="{{ toastShow }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:90;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--text);color:var(--app-bg);border-radius:9px;font-size:13px;font-weight:500;box-shadow:var(--menu-shadow);animation:knot-toast var(--d-menu) ease-out;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      {{ toastText }}
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    theme: 'light', section: 'chats', filter: 'all', search: '',
+    activeId: 'anna', infoOpen: false, notifyOn: true,
+    draft: '', compose: null, dragOver: false,
+    menu: null, react: null, imgOpen: false, modal: null,
+    toast: null, mobileView: 'list', showTyping: true,
+    threads: this.seed(), extraReacts: {},
+  };
+
+  seed() {
+    return {
+      anna: [
+        { t:'date', label:'Вчера' },
+        { id:'a1', in:true, text:'Привет! Ты уже посмотрела макет второй версии онбординга?', time:'14:20' },
+        { id:'a2', in:true, text:'Скинула в Фигму, страница Onboarding', time:'14:20' },
+        { id:'a3', in:false, text:'Да, открыла. В целом очень нравится', time:'14:32', status:'read' },
+        { id:'a4', in:false, reply:{author:'Анна Белова', text:'Скинула в Фигму, страница Onboarding'}, text:'Только шаг с почтой лучше сделать необязательным', time:'14:33', status:'read' },
+        { t:'date', label:'Сегодня' },
+        { id:'a5', in:true, kind:'link', linkHost:'figma.com', linkTitle:'Knot — Onboarding v2', linkDesc:'Черновик потока регистрации и первых экранов', time:'09:05' },
+        { id:'a6', in:true, kind:'image', imgId:'knot-img-a6', time:'09:06' },
+        { id:'a7', in:false, text:'Отлично выглядит, спасибо!', time:'09:08', status:'read' },
+        { id:'a8', in:true, kind:'voice', voiceDur:'0:24', time:'09:10' },
+        { id:'a9', in:true, kind:'doc', docName:'Онбординг_спека.pdf', docMeta:'PDF · 1,8 МБ', time:'09:12', reactions:[{emoji:'👍',count:1,mine:false}] },
+        { id:'a10', in:false, text:'Собрала правки по тексту, отправлю после обеда. Заодно поправлю отступы на втором экране — там сейчас слишком плотно.', time:'12:40', status:'read', edited:true },
+        { t:'call', text:'Пропущенный аудиозвонок' },
+        { id:'a11', in:true, text:'Наберу тебя, как освобожусь', time:'12:52' },
+      ],
+      maxim: [
+        { t:'date', label:'Сегодня' },
+        { id:'m1', in:true, text:'Ты во сколько завтра на встрече?', time:'11:02' },
+        { id:'m2', in:false, text:'К 10 подъеду', time:'11:15', status:'read' },
+        { id:'m3', in:true, text:'Ок, я тогда бронирую переговорку на 10:30', time:'11:16' },
+      ],
+      product: [
+        { t:'date', label:'Сегодня' },
+        { id:'p1', in:true, author:'Дмитрий', text:'Выкатили сборку на стейджинг, можно тестить', time:'10:20' },
+        { id:'p2', in:true, author:'Дмитрий', text:'Ссылка в закрепе', time:'10:20' },
+        { id:'p3', in:false, text:'Проверил профиль — баг с аватаркой пофикшен', time:'10:41', status:'read' },
+        { id:'p4', in:true, author:'Ольга', text:'Супер. Остался только скролл в списке на мобиле', time:'10:44', reactions:[{emoji:'✅',count:2,mine:true}] },
+      ],
+      design: [
+        { t:'date', label:'Вчера' },
+        { id:'d1', in:true, author:'Павел', text:'Обновил токены цветов, синхронизируйте библиотеку', time:'18:30' },
+        { id:'d2', in:false, text:'Готово, подтянул', time:'18:52', status:'read' },
+      ],
+      family: [
+        { t:'date', label:'Сегодня' },
+        { id:'f1', in:true, author:'Мама', text:'Не забудь позвонить бабушке вечером', time:'13:10' },
+        { id:'f2', in:false, text:'Помню, наберу после семи', time:'13:25', status:'sent' },
+      ],
+      saved: [
+        { id:'s1', in:false, text:'Идея: добавить быстрые ответы в списке чатов', time:'08:00', status:'read' },
+        { id:'s2', in:false, kind:'link', linkHost:'developer.mozilla.org', linkTitle:'CSS :focus-visible', linkDesc:'Стилизация фокуса только для клавиатуры', time:'08:02', status:'read' },
+      ],
+    };
+  }
+
+  chatMeta() {
+    return [
+      { id:'anna', name:'Анна Белова', avatar:'АБ', color:'#C9556F', online:true, group:false, pinned:true, username:'@anna_b', about:'Продуктовый дизайнер. Работаем над онбордингом Knot.' },
+      { id:'product', name:'Команда продукта', avatar:'КП', color:'#3E86C7', online:false, group:true, pinned:true, muted:true, username:'8 участников', about:'Рабочий чат продуктовой команды. Релизы, баги, планы.' },
+      { id:'maxim', name:'Максим Орлов', avatar:'МО', color:'#4C9A6A', online:true, group:false, username:'@maxorlov', about:'Менеджер проекта. Встречи и сроки.' },
+      { id:'design', name:'Дизайн-система', avatar:'ДС', color:'#7B61C9', online:false, group:true, username:'12 участников', about:'Обсуждение компонентов и токенов дизайн-системы.' },
+      { id:'family', name:'Семья', avatar:'СМ', color:'#C77F3E', online:false, group:true, muted:true, username:'4 участника', about:'Семейный чат.' },
+      { id:'saved', name:'Сохранённые сообщения', avatar:'★', color:'#5A6270', online:false, group:false, username:'только вы', about:'Заметки и материалы, сохранённые для себя.' },
+    ];
+  }
+
+  componentDidMount() {
+    this._key = (e) => {
+      if (e.key === 'Escape') {
+        if (this.state.imgOpen) return this.setState({imgOpen:false});
+        if (this.state.modal) return this.setState({modal:null});
+        if (this.state.menu) return this.setState({menu:null});
+        if (this.state.react) return this.setState({react:null});
+        if (this.state.infoOpen) return this.setState({infoOpen:false});
+      }
+    };
+    document.addEventListener('keydown', this._key);
+    this._resize = () => { clearTimeout(this._rT); this._rT = setTimeout(()=>this.forceUpdate(), 120); };
+    window.addEventListener('resize', this._resize);
+    this.scrollBottom();
+  }
+  componentWillUnmount(){ document.removeEventListener('keydown', this._key); window.removeEventListener('resize', this._resize); }
+
+  scrollBottom(){ setTimeout(()=>{ if(this.scrollEl) this.scrollEl.scrollTop = this.scrollEl.scrollHeight; }, 30); }
+
+  meta(id){ return this.chatMeta().find(c=>c.id===id); }
+
+  previewOf(id){
+    const arr = (this.state.threads[id]||[]).filter(m=>m.id);
+    const last = arr[arr.length-1];
+    if(!last) return {text:'Нет сообщений', out:false};
+    let text = last.text;
+    if(last.kind==='image') text='Фото';
+    else if(last.kind==='voice') text='Голосовое сообщение';
+    else if(last.kind==='doc') text=last.docName;
+    else if(last.kind==='link') text=last.linkTitle;
+    return {text, out:!last.in, status:last.status, author:last.author};
+  }
+
+  toast(text){
+    this.setState({toast:text});
+    clearTimeout(this._toastT);
+    this._toastT = setTimeout(()=>this.setState({toast:null}), 2400);
+  }
+
+  reactChoicesList(){ return ['👍','❤️','😂','🎉','🙏','🔥']; }
+
+  renderVals(){
+    const s = this.state;
+    const dark = s.theme==='dark';
+    const metaList = this.chatMeta();
+    const active = this.meta(s.activeId);
+
+    // chat list rows
+    const rows = metaList.map(m=>{
+      const pv = this.previewOf(m.id);
+      const drafts = { maxim:'', design:'Нужно ещё раз пройтись по контрасту' };
+      const hasDraft = !!drafts[m.id];
+      const unreadMap = { product:3, family:1 };
+      const unread = m.id!==s.activeId ? (unreadMap[m.id]||0) : 0;
+      const isActive = m.id===s.activeId;
+      const times = { anna:'12:52', product:'10:44', maxim:'11:16', design:'вчера', family:'13:25', saved:'08:02' };
+      const previewText = hasDraft ? drafts[m.id] : pv.text;
+      const showStatus = !hasDraft && pv.out && !!pv.status;
+      return {
+        id:m.id, name:m.name, online:m.online, pinned:m.pinned, muted:m.muted,
+        avatarText:m.avatar, group:m.group, hasDraft,
+        select: ()=>this.selectChat(m.id),
+        avatarStyle:`width:42px;height:42px;border-radius:50%;background:${m.color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;`,
+        rowStyle:`position:relative;display:flex;gap:12px;width:100%;padding:9px 10px;border-radius:10px;text-align:left;align-items:center;transition:background var(--d-hover);background:${isActive?'var(--active-item)':'transparent'};`+ (isActive?'':'`'),
+        nameStyle:`font-size:14px;line-height:19px;font-weight:${unread?600:550};color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`,
+        time:times[m.id], timeColor: unread?'var(--accent)':'var(--text-muted)',
+        preview: previewText,
+        previewStyle:`font-size:13px;line-height:18px;color:${unread?'var(--text-2)':'var(--text-muted)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;`,
+        hasStatus: showStatus, statusIcon: pv.status==='read'?'✓✓':'✓',
+        statusStyle:`font-size:12px;color:${pv.status==='read'?'var(--accent)':'var(--text-muted)'};flex-shrink:0;`,
+        unread: unread>0, unreadCount: String(unread),
+        badgeStyle:`min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:${m.muted?'var(--text-disabled)':'var(--accent)'};color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;`,
+      };
+    });
+    // fix rowStyle hover via class; strip accidental char
+    rows.forEach(r=>{ r.rowStyle = r.rowStyle.replace('`',''); });
+
+    const q = s.search.trim().toLowerCase();
+    let filtered = rows.filter(r=>{
+      if(s.filter==='dm' && r.group) return false;
+      if(s.filter==='grp' && !r.group) return false;
+      if(q && !r.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const isChats = s.section==='chats' || s.section==='saved';
+    if(s.section==='saved') filtered = filtered.filter(r=>r.id==='saved');
+
+    const pinned = isChats ? filtered.filter(r=>r.pinned) : [];
+    const normal = isChats ? filtered.filter(r=>!r.pinned) : [];
+
+    // messages
+    const raw = s.threads[s.activeId] || [];
+    const items = [];
+    raw.forEach((m,i)=>{
+      if(m.t==='date'){ items.push({isDate:true,label:m.label}); return; }
+      if(m.t==='call'){ items.push({isSystem:true,text:m.text}); return; }
+      const prev = raw[i-1];
+      const next = raw[i+1];
+      const sameAuthorPrev = prev && prev.id && prev.in===m.in && (prev.author||'')===(m.author||'');
+      const sameAuthorNext = next && next.id && next.in===m.in && (next.author||'')===(m.author||'');
+      const out = !m.in;
+      const showAvatar = m.in && !sameAuthorNext;
+      const showName = active.group && m.in && !sameAuthorPrev;
+      const kind = m.kind;
+      const hasText = !!m.text;
+      const bubbleBg = out?'var(--msg-out)':'var(--msg-in)';
+      const textColor = out?'var(--msg-out-text)':'var(--msg-in-text)';
+      const metaColor = out?'rgba(255,255,255,0.7)':'var(--text-muted)';
+      const authorColors = ['#C9556F','#3E86C7','#4C9A6A','#7B61C9','#C77F3E'];
+      const acolor = authorColors[(m.author||'').length % authorColors.length];
+      const reactions = (m.reactions||[]).map((r,ri)=>({
+        emoji:r.emoji, count:String(r.count),
+        toggle:()=>this.toggleReaction(m.id, r.emoji),
+        style:`display:flex;align-items:center;gap:3px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;line-height:1;background:${r.mine?'var(--accent-soft)':'var(--surface-2)'};border:1px solid ${r.mine?'var(--border-active)':'var(--border-weak)'};color:var(--text-2);`,
+      }));
+      // extra reactions added at runtime
+      (s.extraReacts[m.id]||[]).forEach(e=>reactions.push({
+        emoji:e, count:'1', toggle:()=>this.toggleReaction(m.id,e),
+        style:`display:flex;align-items:center;gap:3px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;line-height:1;background:var(--accent-soft);border:1px solid var(--border-active);color:var(--text-2);`,
+      }));
+      items.push({
+        isMsg:true, out, kind,
+        rowStyle:`position:relative;display:flex;gap:8px;justify-content:${out?'flex-end':'flex-start'};margin-top:${sameAuthorPrev?'3px':'14px'};`,
+        showAvatarSlot: m.in, showAvatar,
+        avatarText: showName? (m.author||active.name).slice(0,2) : (active.group? (m.author||'').slice(0,2): active.avatar),
+        avatarStyle:`width:30px;height:30px;border-radius:50%;background:${active.group?acolor:active.color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;`,
+        colStyle:`display:flex;flex-direction:column;align-items:${out?'flex-end':'flex-start'};max-width:min(560px,68%);min-width:0;`,
+        showName, authorName:m.author, nameColor:acolor,
+        bubbleStyle:`position:relative;background:${bubbleBg};color:${textColor};border-radius:14px;${out?'border-bottom-right-radius:5px;':'border-bottom-left-radius:5px;'}padding:8px 12px;font-size:14px;line-height:20px;word-break:break-word;max-width:100%;`,
+        hasReply:!!m.reply, replyAuthor:m.reply&&m.reply.author, replyText:m.reply&&m.reply.text,
+        replyStyle:`display:block;border-left:2px solid ${out?'rgba(255,255,255,0.6)':'var(--accent)'};background:${out?'var(--reply-out)':'var(--reply-in)'};padding:4px 8px;border-radius:5px;margin-bottom:5px;max-width:100%;overflow:hidden;`,
+        replyAccent: out?'#fff':'var(--accent)', replyTextColor: out?'rgba(255,255,255,0.85)':'var(--text-2)',
+        hasText, text:m.text, textStyle:`color:${textColor};`,
+        isImage:kind==='image', imgId:m.imgId, openImg:()=>this.setState({imgOpen:true}),
+        isVoice:kind==='voice', voiceDur:m.voiceDur,
+        voiceBtnStyle:`width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:${out?'rgba(255,255,255,0.2)':'var(--accent)'};color:#fff;`,
+        waveColor: out?'rgba(255,255,255,0.65)':'var(--accent)',
+        waveform: [8,14,20,11,16,22,9,13,18,7,15,21,10,17,12,19,8,14,11,16].map(h=>({h:h+'px'})),
+        isDoc:kind==='doc', docName:m.docName, docMeta:m.docMeta,
+        docIconStyle:`width:38px;height:38px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:${out?'rgba(255,255,255,0.18)':'var(--accent-soft)'};color:${out?'#fff':'var(--accent)'};`,
+        isLink:kind==='link', linkHost:m.linkHost, linkTitle:m.linkTitle, linkDesc:m.linkDesc,
+        linkAccent: out?'rgba(255,255,255,0.6)':'var(--accent)', linkTitleColor:textColor,
+        linkDescColor: out?'rgba(255,255,255,0.8)':'var(--text-2)',
+        noop:(e)=>{e.preventDefault(); this.toast('Ссылка открыта');},
+        metaColor, time:m.time, edited:!!m.edited,
+        showStatus: out && !!m.status, statusIcon: m.status==='read'?'✓✓':'✓',
+        statusColor:`color:${m.status==='read'?(out?'#bcd0ff':'var(--accent)'):'rgba(255,255,255,0.7)'}`,
+        hasReactions: reactions.length>0, reactions, reactAlign: out?'justify-content:flex-end;':'',
+        actionsStyle:`position:absolute;top:-14px;${out?'left:-4px;':'right:-4px;'}${out?'':'left:auto;'}display:flex;gap:1px;padding:2px;background:var(--surface);border:1px solid var(--border-weak);border-radius:9px;box-shadow:var(--menu-shadow);opacity:0;transition:opacity var(--d-hover);pointer-events:auto;z-index:5;${out?'right:auto;left:-4px;':'left:auto;right:-4px;'}`,
+        react:(e)=>this.openReact(e,m.id), reply:()=>this.startReply(m.id),
+        forward:()=>this.toast('Переслать сообщение'),
+        onMenu:(e)=>this.openMenu(e,m.id,out&&kind==null&&hasText),
+      });
+    });
+
+    const tabStyle = (on)=>`position:relative;padding:12px 2px 11px;font-size:13px;font-weight:${on?600:500};color:${on?'var(--text)':'var(--text-2)'};transition:color var(--d-hover);`+(on?'border-bottom:2px solid var(--accent);margin-bottom:-1px;':'border-bottom:2px solid transparent;margin-bottom:-1px;');
+
+    const ghostIcon = 'width:34px;height:34px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--text-2);transition:background var(--d-hover),color var(--d-hover);flex-shrink:0;';
+    const actIcon = 'width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-2);transition:background var(--d-hover);';
+    const composerIcon = 'width:36px;height:36px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--text-2);transition:background var(--d-hover),color var(--d-hover);flex-shrink:0;';
+
+    const navBtn = (id, on)=>`position:relative;width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:${on?'var(--accent)':'var(--text-2)'};background:${on?'var(--accent-soft)':'transparent'};transition:background var(--d-hover),color var(--d-hover);`;
+    const tipStyle = 'position:absolute;left:52px;top:50%;transform:translateY(-50%);white-space:nowrap;background:var(--text);color:var(--app-bg);font-size:12px;font-weight:500;padding:5px 9px;border-radius:7px;opacity:0;visibility:hidden;transition:opacity var(--d-hover);pointer-events:none;z-index:40;box-shadow:var(--menu-shadow);';
+
+    const mNav = (on)=>`flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;min-height:52px;color:${on?'var(--accent)':'var(--text-2)'};`;
+
+    const infoAction = 'flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 4px;border-radius:9px;background:var(--surface-2);color:var(--text-2);font-weight:500;transition:background var(--d-hover),color var(--d-hover);';
+    const infoRow = 'display:flex;align-items:center;justify-content:space-between;width:100%;padding:9px 10px;border-radius:8px;font-size:14px;color:var(--text);transition:background var(--d-hover);';
+
+    const compose = s.compose;
+    const draftText = s.draft.trim();
+
+    // menu position
+    const mp = s.menu || {};
+    const rp = s.react || {};
+
+    const switchTrack = (on)=>`width:38px;height:22px;border-radius:11px;padding:2px;display:flex;background:${on?'var(--accent)':'var(--border)'};transition:background var(--d-panel);flex-shrink:0;`;
+    const switchThumb = (on)=>`width:18px;height:18px;border-radius:50%;background:#fff;transition:transform var(--d-panel);transform:translateX(${on?'16px':'0'});box-shadow:0 1px 2px rgba(0,0,0,0.2);`;
+
+    return {
+      theme:s.theme, isDark:dark, isLight:!dark,
+      onRootClick:()=>{},
+      // nav
+      navRailStyle:`width:68px;flex-shrink:0;background:var(--sidebar-bg);border-right:1px solid var(--divider);display:flex;flex-direction:column;justify-content:space-between;align-items:center;`+(this._mobile()?'display:none;':''),
+      navChatsStyle:navBtn('chats',s.section==='chats'), navContactsStyle:navBtn('c',s.section==='contacts'),
+      navCallsStyle:navBtn('cl',s.section==='calls'), navSavedStyle:navBtn('sv',s.section==='saved'),
+      navSettingsStyle:navBtn('set',false), tipStyle,
+      goChats:()=>this.setState({section:'chats'}), goContacts:()=>this.setState({section:'contacts'}),
+      goCalls:()=>this.setState({section:'calls'}), goSaved:()=>this.setState({section:'saved'}),
+      openSettings:()=>this.setState({modal:'settings'}),
+      // list column
+      listColStyle:`width:324px;flex-shrink:0;background:var(--sidebar-bg);border-right:1px solid var(--divider);display:flex;flex-direction:column;min-height:0;`,
+      listTitle: s.section==='contacts'?'Контакты': s.section==='calls'?'Звонки': s.section==='saved'?'Сохранённые':'Сообщения',
+      openNewChat:()=>this.setState({modal:'new'}),
+      search:s.search, onSearch:(e)=>this.setState({search:e.target.value}),
+      showChatChrome: isChats && s.section!=='saved',
+      tabAllSel:s.filter==='all'?'true':'false', tabDmSel:s.filter==='dm'?'true':'false', tabGrpSel:s.filter==='grp'?'true':'false',
+      tabAllStyle:tabStyle(s.filter==='all'), tabDmStyle:tabStyle(s.filter==='dm'), tabGrpStyle:tabStyle(s.filter==='grp'),
+      filterAll:()=>this.setState({filter:'all'}), filterDm:()=>this.setState({filter:'dm'}), filterGrp:()=>this.setState({filter:'grp'}),
+      pinnedChats:pinned, chats:normal,
+      listEmpty: !isChats,
+      emptyTitle: s.section==='contacts'?'Список контактов': s.section==='calls'?'История звонков':'Ничего не найдено',
+      emptyDesc: s.section==='contacts'?'Здесь появятся ваши сохранённые контакты.': s.section==='calls'?'Недавних звонков пока нет.':'Попробуйте изменить запрос.',
+      // conversation
+      hasActive: isChats && !!active && !this._mobileListVisible(),
+      noActive: !isChats || false && !active,
+      convColStyle:`flex:1;min-width:520px;display:flex;flex-direction:column;background:var(--surface);min-height:0;`+(this._mobile()?'min-width:0;'+(s.mobileView==='chat'?'':'display:none;'):''),
+      backBtnStyle: (this._mobile()?'':'display:none;')+' width:34px;height:34px;border-radius:7px;align-items:center;justify-content:center;color:var(--text-2);flex-shrink:0;display:'+(this._mobile()?'flex':'none')+';',
+      headAvatarStyle:`width:38px;height:38px;border-radius:50%;background:${active?active.color:'#888'};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;`,
+      activeAvatar: active&&active.avatar, activeName: active&&active.name, activeAvatarColor: active&&active.color,
+      activeOnline: active&&active.online, activeUsername: active&&active.username,
+      activeStatus: active? (active.group? active.username : (active.online?'в сети':'был недавно')):'',
+      activeStatusColor: (active&&active.online&&!active.group)?'var(--success)':'var(--text-muted)',
+      activeAbout: active&&active.about,
+      ghostIcon, infoBtnStyle: ghostIcon+`color:${s.infoOpen?'var(--accent)':'var(--text-2)'};`+(s.infoOpen?'background:var(--accent-soft);':''),
+      toggleInfo:()=>this.setState({infoOpen:!s.infoOpen}),
+      callToast:()=>this.toast('Звонок недоступен в демо'), openHeaderMenu:()=>this.toast('Меню чата'),
+      mobileBack:()=>this.setState({mobileView:'list'}),
+      msgScrollStyle:`flex:1;overflow-y:auto;min-height:0;background:var(--surface);`,
+      setScrollRef:(el)=>{ this.scrollEl = el; },
+      items, showTyping: s.showTyping && s.activeId==='anna',
+      actIcon,
+      // composer
+      composerStyle:`display:flex;align-items:flex-end;gap:4px;min-height:44px;padding:4px 6px;background:var(--surface-2);border:1px solid var(--border);border-radius:${compose?'0 0 11px 11px':'11px'};transition:border var(--d-hover);`,
+      composerIcon, draft:s.draft, onDraft:(e)=>this.onDraft(e), onComposerKey:(e)=>this.onComposerKey(e),
+      hasDraftText: draftText.length>0, noDraftText: draftText.length===0,
+      send:()=>this.send(),
+      replyBar: !!compose, composeCtxTitle: compose? (compose.mode==='edit'?'Редактирование': ('Ответ '+(compose.author||''))):'',
+      composeCtxText: compose? compose.text : '',
+      clearCompose:()=>this.setState({compose:null, draft: compose&&compose.mode==='edit'?'':s.draft}),
+      attachToast:()=>this.toast('Выбор файла'), emojiToast:()=>this.toast('Эмодзи'), voiceToast:()=>this.toast('Запись голосового'),
+      dragOver:s.dragOver,
+      // info panel
+      infoOpen:s.infoOpen,
+      infoPanelStyle:`background:var(--surface);border-left:1px solid var(--divider);display:flex;flex-direction:column;min-height:0;animation:knot-panel var(--d-panel) ease-out;`+(this._narrow()?`position:fixed;top:0;right:0;bottom:0;width:${this._mobile()?'88%':'320px'};max-width:360px;z-index:75;box-shadow:var(--modal-shadow);`:'width:300px;flex-shrink:0;'),
+      infoActionStyle:infoAction, infoRowStyle:infoRow,
+      notifyOn:s.notifyOn?'true':'false', toggleNotify:()=>this.setState({notifyOn:!s.notifyOn}),
+      switchTrackStyle:switchTrack(s.notifyOn), switchThumbStyle:switchThumb(s.notifyOn),
+      dangerLabel: active&&active.group?'Покинуть группу':'Удалить диалог',
+      dangerToast:()=>this.toast(active&&active.group?'Вы покинули группу':'Диалог удалён'),
+      // context menu
+      menuOpen:!!s.menu, menuStyle:`position:fixed;top:${mp.y||0}px;left:${mp.x||0}px;min-width:180px;background:var(--surface);border:1px solid var(--border-weak);border-radius:10px;box-shadow:var(--menu-shadow);padding:5px;animation:knot-menu var(--d-menu) ease-out;`,
+      menuItem:'display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:7px;font-size:13px;color:var(--text);text-align:left;transition:background var(--d-hover);',
+      menuItemDanger:'display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:7px;font-size:13px;color:var(--error);text-align:left;transition:background var(--d-hover);',
+      menuCanEdit: mp.canEdit, closeMenu:()=>this.setState({menu:null}), stop:(e)=>e.stopPropagation(),
+      menuReply:()=>{ this.startReply(mp.id); this.setState({menu:null}); },
+      menuCopy:()=>{ this.setState({menu:null}); this.toast('Скопировано'); },
+      menuForward:()=>{ this.setState({menu:null}); this.toast('Переслать сообщение'); },
+      menuEdit:()=>{ this.startEdit(mp.id); this.setState({menu:null}); },
+      menuDelete:()=>{ this.deleteMsg(mp.id); this.setState({menu:null}); this.toast('Сообщение удалено'); },
+      // reactions picker
+      reactOpen:!!s.react, reactPickerStyle:`position:fixed;top:${rp.y||0}px;left:${rp.x||0}px;display:flex;gap:2px;padding:5px;background:var(--surface);border:1px solid var(--border-weak);border-radius:11px;box-shadow:var(--menu-shadow);animation:knot-menu var(--d-menu) ease-out;`,
+      reactChoices: this.reactChoicesList().map(e=>({emoji:e, pick:()=>{ this.toggleReaction(rp.id,e); this.setState({react:null}); }})),
+      closeReact:()=>this.setState({react:null}),
+      // image
+      imgOpen:s.imgOpen, closeImage:()=>this.setState({imgOpen:false}),
+      // modal
+      modalOpen:!!s.modal, modalWidth: s.modal==='settings'?'420px':'440px',
+      modalTitle: s.modal==='settings'?'Настройки':'Новый чат',
+      isNewChat:s.modal==='new', isSettings:s.modal==='settings',
+      closeModal:()=>this.setState({modal:null}),
+      contactChoices: metaList.filter(m=>!m.group && m.id!=='saved').map(m=>({
+        name:m.name, avatar:m.avatar, color:m.color, sub:m.online?'в сети':'был недавно',
+        start:()=>{ this.setState({modal:null}); this.selectChat(m.id); },
+      })),
+      themeSwitchTrack:switchTrack(dark), themeSwitchThumb:switchThumb(dark),
+      // theme toggle FAB
+      themeToggleStyle:`position:fixed;top:14px;right:16px;z-index:50;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-2);background:var(--surface);border:1px solid var(--border-weak);box-shadow:var(--menu-shadow);transition:background var(--d-hover);`+(this._mobile()?'top:auto;bottom:70px;':''),
+      toggleTheme:()=>this.setState({theme:dark?'light':'dark'}),
+      // mobile nav
+      mobileNavStyle:(this._mobile()?'display:flex;':'display:none;')+`position:fixed;bottom:0;left:0;right:0;height:calc(56px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--sidebar-bg);border-top:1px solid var(--divider);z-index:45;`+(s.mobileView==='chat'?'display:none;':''),
+      mChatsStyle:mNav(s.section==='chats'), mContactsStyle:mNav(s.section==='contacts'), mCallsStyle:mNav(s.section==='calls'), mSettingsStyle:mNav(false),
+      // toast
+      toastShow:!!s.toast, toastText:s.toast,
+    };
+  }
+
+  _mobile(){ return typeof window!=='undefined' && window.innerWidth<768; }
+  _narrow(){ return typeof window!=='undefined' && window.innerWidth<1240; }
+  _mobileListVisible(){ return this._mobile() && this.state.mobileView==='list'; }
+
+  onDraft(e){
+    const el = e.target;
+    el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,140)+'px';
+    this.setState({draft:el.value});
+  }
+  onComposerKey(e){
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); this.send(); }
+  }
+  selectChat(id){
+    this.setState({activeId:id, infoOpen:false, compose:null, mobileView:'chat'});
+    this.scrollBottom();
+  }
+  send(){
+    const text = this.state.draft.trim();
+    if(!text) return;
+    const threads = {...this.state.threads};
+    const arr = [...(threads[this.state.activeId]||[])];
+    const c = this.state.compose;
+    if(c && c.mode==='edit'){
+      const idx = arr.findIndex(m=>m.id===c.id);
+      if(idx>=0) arr[idx] = {...arr[idx], text, edited:true};
+    } else {
+      const msg = { id:'x'+Date.now(), in:false, text, time:this.now(), status:'sent' };
+      if(c && c.mode==='reply') msg.reply = {author:c.author, text:c.text};
+      arr.push(msg);
+    }
+    threads[this.state.activeId] = arr;
+    this.setState({threads, draft:'', compose:null});
+    this.scrollBottom();
+    if(this._ta){ this._ta.style.height='auto'; }
+  }
+  now(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+  msgById(id){ return (this.state.threads[this.state.activeId]||[]).find(m=>m.id===id); }
+  startReply(id){ const m=this.msgById(id); if(!m) return; const active=this.meta(this.state.activeId); const author = m.in?(m.author||active.name):'Вы'; let text=m.text||(m.kind==='image'?'Фото':m.kind==='voice'?'Голосовое':m.kind==='doc'?m.docName:m.kind==='link'?m.linkTitle:''); this.setState({compose:{mode:'reply', id, author, text}}); }
+  startEdit(id){ const m=this.msgById(id); if(!m||m.in) return; this.setState({compose:{mode:'edit', id, text:m.text}, draft:m.text}); }
+  deleteMsg(id){ const threads={...this.state.threads}; threads[this.state.activeId]=(threads[this.state.activeId]||[]).filter(m=>m.id!==id); this.setState({threads}); }
+  openMenu(e,id,canEdit){ e.preventDefault(); const x=Math.min(e.clientX, window.innerWidth-200); const y=Math.min(e.clientY, window.innerHeight-260); this.setState({menu:{id,x,y,canEdit}, react:null}); }
+  openReact(e,id){ e.stopPropagation(); const r=e.currentTarget.getBoundingClientRect(); const x=Math.min(r.left, window.innerWidth-240); const y=Math.max(r.top-46, 10); this.setState({react:{id,x,y}, menu:null}); }
+  toggleReaction(id,emoji){
+    const threads={...this.state.threads};
+    const arr=[...(threads[this.state.activeId]||[])];
+    const idx=arr.findIndex(m=>m.id===id);
+    const extra={...this.state.extraReacts};
+    if(idx>=0){
+      const m={...arr[idx]}; const rx=[...(m.reactions||[])];
+      const ei=rx.findIndex(r=>r.emoji===emoji);
+      if(ei>=0){ if(rx[ei].mine){ rx.splice(ei,1);} else { rx[ei]={...rx[ei],count:rx[ei].count+1,mine:true}; } m.reactions=rx; arr[idx]=m; threads[this.state.activeId]=arr; this.setState({threads}); return; }
+    }
+    const cur=extra[id]||[];
+    if(cur.includes(emoji)) extra[id]=cur.filter(x=>x!==emoji); else extra[id]=[...cur,emoji];
+    this.setState({extraReacts:extra});
+  }
+}
+</script>
+</body>
+</html>

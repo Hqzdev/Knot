@@ -10,7 +10,7 @@ import (
 func TestMemoryStoreLifecycleAndOwnership(t *testing.T) {
 	now := time.Unix(1_900_000_000, 0).UTC()
 	store := NewMemoryStore()
-	attachment := Attachment{ID: "id", OwnerUserID: "owner", OwnerDeviceID: "device", ObjectKey: "key", CiphertextSize: 12, CiphertextSHA256: "hash", Status: StatusPending, CreatedAt: now, ExpiresAt: now.Add(time.Minute)}
+	attachment := Attachment{ID: "id", OwnerUserID: "owner", OwnerSessionID: "device", ObjectKey: "key", Size: 12, SHA256: "hash", Status: StatusPending, CreatedAt: now, ExpiresAt: now.Add(time.Minute)}
 	if err := store.Create(context.Background(), attachment); err != nil {
 		t.Fatal(err)
 	}

@@ -10,20 +10,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const schemaVersion = 1
+
 const schema = `
-CREATE TABLE IF NOT EXISTS attachment_metadata (
+CREATE TABLE knot_unsecure_attachment_schema (
+    version BIGINT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL
+);
+CREATE TABLE attachment_metadata (
     id TEXT PRIMARY KEY,
     owner_user_id TEXT NOT NULL,
-    owner_device_id TEXT NOT NULL,
+    owner_session_id TEXT NOT NULL,
     object_key TEXT NOT NULL UNIQUE,
-    ciphertext_size BIGINT NOT NULL CHECK (ciphertext_size > 0),
-    ciphertext_sha256 TEXT NOT NULL CHECK (length(ciphertext_sha256) = 64),
+    size BIGINT NOT NULL CHECK (size > 0),
+    sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
     status TEXT NOT NULL CHECK (status IN ('pending', 'ready', 'deleting')),
     created_at TIMESTAMPTZ NOT NULL,
     completed_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ NOT NULL
 );
-CREATE INDEX IF NOT EXISTS attachment_metadata_expiry_idx
+CREATE INDEX attachment_metadata_expiry_idx
 ON attachment_metadata (status, expires_at, id);
 `
 
@@ -45,21 +51,52 @@ func NewPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, 
 }
 
 func (store *PostgresStore) Migrate(ctx context.Context) error {
-	_, err := store.pool.Exec(ctx, schema)
-	return err
+	transaction, err := store.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback(ctx)
+	var marker *string
+	if err := transaction.QueryRow(ctx, `SELECT to_regclass('public.knot_unsecure_attachment_schema')::TEXT`).Scan(&marker); err != nil {
+		return err
+	}
+	if marker != nil {
+		var version int
+		if err := transaction.QueryRow(ctx, `SELECT version FROM knot_unsecure_attachment_schema ORDER BY version DESC LIMIT 1`).Scan(&version); err != nil {
+			return err
+		}
+		if version != schemaVersion {
+			return errors.New("unsupported Knot Unsecure attachment schema")
+		}
+		return transaction.Commit(ctx)
+	}
+	var legacy *string
+	if err := transaction.QueryRow(ctx, `SELECT to_regclass('public.attachment_metadata')::TEXT`).Scan(&legacy); err != nil {
+		return err
+	}
+	if legacy != nil {
+		return ErrLegacySchema
+	}
+	if _, err := transaction.Exec(ctx, schema); err != nil {
+		return err
+	}
+	if _, err := transaction.Exec(ctx, `INSERT INTO knot_unsecure_attachment_schema (version, applied_at) VALUES ($1, $2)`, schemaVersion, time.Now().UTC()); err != nil {
+		return err
+	}
+	return transaction.Commit(ctx)
 }
 
 func (store *PostgresStore) Create(ctx context.Context, attachment Attachment) error {
 	_, err := store.pool.Exec(ctx,
 		`INSERT INTO attachment_metadata
-         (id, owner_user_id, owner_device_id, object_key, ciphertext_size, ciphertext_sha256, status, created_at, completed_at, expires_at)
+         (id, owner_user_id, owner_session_id, object_key, size, sha256, status, created_at, completed_at, expires_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		attachment.ID,
 		attachment.OwnerUserID,
-		attachment.OwnerDeviceID,
+		attachment.OwnerSessionID,
 		attachment.ObjectKey,
-		attachment.CiphertextSize,
-		attachment.CiphertextSHA256,
+		attachment.Size,
+		attachment.SHA256,
 		attachment.Status,
 		attachment.CreatedAt,
 		attachment.CompletedAt,
@@ -73,7 +110,7 @@ func (store *PostgresStore) Create(ctx context.Context, attachment Attachment) e
 
 func (store *PostgresStore) FindForCompletion(ctx context.Context, id string, ownerUserID string, now time.Time) (Attachment, error) {
 	return scanAttachment(store.pool.QueryRow(ctx,
-		`SELECT id, owner_user_id, owner_device_id, object_key, ciphertext_size, ciphertext_sha256, status, created_at, completed_at, expires_at
+		`SELECT id, owner_user_id, owner_session_id, object_key, size, sha256, status, created_at, completed_at, expires_at
          FROM attachment_metadata
          WHERE id = $1 AND owner_user_id = $2 AND status IN ('pending', 'ready') AND expires_at > $3`,
 		id,
@@ -89,7 +126,7 @@ func (store *PostgresStore) Complete(ctx context.Context, id string, ownerUserID
 	}
 	defer transaction.Rollback(ctx)
 	attachment, err := scanAttachment(transaction.QueryRow(ctx,
-		`SELECT id, owner_user_id, owner_device_id, object_key, ciphertext_size, ciphertext_sha256, status, created_at, completed_at, expires_at
+		`SELECT id, owner_user_id, owner_session_id, object_key, size, sha256, status, created_at, completed_at, expires_at
          FROM attachment_metadata
          WHERE id = $1 AND owner_user_id = $2
          FOR UPDATE`,
@@ -130,7 +167,7 @@ func (store *PostgresStore) Complete(ctx context.Context, id string, ownerUserID
 
 func (store *PostgresStore) FindReady(ctx context.Context, id string, now time.Time) (Attachment, error) {
 	return scanAttachment(store.pool.QueryRow(ctx,
-		`SELECT id, owner_user_id, owner_device_id, object_key, ciphertext_size, ciphertext_sha256, status, created_at, completed_at, expires_at
+		`SELECT id, owner_user_id, owner_session_id, object_key, size, sha256, status, created_at, completed_at, expires_at
          FROM attachment_metadata
          WHERE id = $1 AND status = 'ready' AND expires_at > $2`,
 		id,
@@ -145,7 +182,7 @@ func (store *PostgresStore) ClaimDelete(ctx context.Context, id string, ownerUse
 	}
 	defer transaction.Rollback(ctx)
 	attachment, err := scanAttachment(transaction.QueryRow(ctx,
-		`SELECT id, owner_user_id, owner_device_id, object_key, ciphertext_size, ciphertext_sha256, status, created_at, completed_at, expires_at
+		`SELECT id, owner_user_id, owner_session_id, object_key, size, sha256, status, created_at, completed_at, expires_at
          FROM attachment_metadata
          WHERE id = $1 AND owner_user_id = $2
          FOR UPDATE`,
@@ -189,8 +226,8 @@ func (store *PostgresStore) ClaimExpired(ctx context.Context, now time.Time, lim
          SET status = 'deleting', expires_at = LEAST(attachment.expires_at, $1)
          FROM candidates
          WHERE attachment.id = candidates.id
-         RETURNING attachment.id, attachment.owner_user_id, attachment.owner_device_id, attachment.object_key,
-                   attachment.ciphertext_size, attachment.ciphertext_sha256, attachment.status,
+         RETURNING attachment.id, attachment.owner_user_id, attachment.owner_session_id, attachment.object_key,
+                   attachment.size, attachment.sha256, attachment.status,
                    attachment.created_at, attachment.completed_at, attachment.expires_at`,
 		now,
 		limit,
@@ -229,10 +266,10 @@ func scanAttachment(row pgx.Row) (Attachment, error) {
 	err := row.Scan(
 		&attachment.ID,
 		&attachment.OwnerUserID,
-		&attachment.OwnerDeviceID,
+		&attachment.OwnerSessionID,
 		&attachment.ObjectKey,
-		&attachment.CiphertextSize,
-		&attachment.CiphertextSHA256,
+		&attachment.Size,
+		&attachment.SHA256,
 		&attachment.Status,
 		&attachment.CreatedAt,
 		&attachment.CompletedAt,

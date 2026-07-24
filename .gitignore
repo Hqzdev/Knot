@@ -1,18 +1,8 @@
-/target/
-/clients/apple/.build/
-/clients/apple/dist/
-/clients/apple/.swiftpm/
-/clients/apple/Knot/Frameworks/
-/clients/apple/Knot/Knot 2.xcodeproj/
-/clients/apple/**/xcuserdata/
-/clients/apple/**/*.xcuserstate
 /clients/web/node_modules/
+/clients/web/.next/
 /clients/web/dist/
-/clients/web/public/crypto/
 /clients/web/test-results/
 /clients/web/playwright-report/
 /clients/web/*.tsbuildinfo
 .DS_Store
 .env
-*.p8
-/deploy/kubernetes/secrets.yaml

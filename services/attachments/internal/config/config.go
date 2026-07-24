@@ -11,14 +11,13 @@ import (
 )
 
 const (
-	defaultMaxCiphertextSize = int64(100 << 20)
-	maximumCiphertextSize    = int64(5 << 30)
-	defaultUploadTTL         = 15 * time.Minute
-	defaultPendingTTL        = 24 * time.Hour
-	defaultDownloadTTL       = 5 * time.Minute
-	defaultRetentionTTL      = 7 * 24 * time.Hour
-	defaultCleanupInterval   = time.Minute
-	defaultCleanupBatch      = 100
+	defaultMaxSize         = int64(100 << 20)
+	maximumSize            = int64(5 << 30)
+	defaultUploadTTL       = 15 * time.Minute
+	defaultPendingTTL      = 24 * time.Hour
+	defaultDownloadTTL     = 5 * time.Minute
+	defaultCleanupInterval = time.Minute
+	defaultCleanupBatch    = 100
 )
 
 type Config struct {
@@ -46,7 +45,7 @@ func Load() (Config, error) {
 	if metadataMode == "postgres" && databaseURL == "" {
 		return Config{}, errors.New("KNOT_ATTACHMENTS_DATABASE_URL is required for postgres")
 	}
-	maxSize, err := boundedInt64("KNOT_ATTACHMENT_MAX_SIZE_BYTES", defaultMaxCiphertextSize, 1, maximumCiphertextSize)
+	maxSize, err := boundedInt64("KNOT_ATTACHMENT_MAX_SIZE_BYTES", defaultMaxSize, 1, maximumSize)
 	if err != nil {
 		return Config{}, err
 	}
@@ -62,10 +61,6 @@ func Load() (Config, error) {
 		return Config{}, errors.New("KNOT_ATTACHMENT_PENDING_TTL must not be shorter than upload TTL")
 	}
 	downloadTTL, err := boundedDuration("KNOT_ATTACHMENT_DOWNLOAD_TTL", defaultDownloadTTL, time.Minute, time.Hour)
-	if err != nil {
-		return Config{}, err
-	}
-	retentionTTL, err := boundedDuration("KNOT_ATTACHMENT_RETENTION_TTL", defaultRetentionTTL, time.Hour, 365*24*time.Hour)
 	if err != nil {
 		return Config{}, err
 	}
@@ -101,11 +96,10 @@ func Load() (Config, error) {
 		DatabaseURL:  databaseURL,
 		S3:           s3,
 		Limits: api.Limits{
-			MaxCiphertextSize: maxSize,
-			UploadTTL:         uploadTTL,
-			PendingTTL:        pendingTTL,
-			DownloadTTL:       downloadTTL,
-			RetentionTTL:      retentionTTL,
+			MaxSize:     maxSize,
+			UploadTTL:   uploadTTL,
+			PendingTTL:  pendingTTL,
+			DownloadTTL: downloadTTL,
 		},
 		CleanupInterval: cleanupInterval,
 		CleanupBatch:    int(cleanupBatchValue),

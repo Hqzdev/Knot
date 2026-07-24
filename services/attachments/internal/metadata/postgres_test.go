@@ -19,7 +19,7 @@ func TestPostgresStoreLifecycle(t *testing.T) {
 	defer store.Close()
 	now := time.Now().UTC()
 	id := "postgres-attachment-" + now.Format("20060102T150405.000000000")
-	attachment := Attachment{ID: id, OwnerUserID: "owner", OwnerDeviceID: "device", ObjectKey: id, CiphertextSize: 12, CiphertextSHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Status: StatusPending, CreatedAt: now, ExpiresAt: now.Add(time.Minute)}
+	attachment := Attachment{ID: id, OwnerUserID: "owner", OwnerSessionID: "device", ObjectKey: id, Size: 12, SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Status: StatusPending, CreatedAt: now, ExpiresAt: now.Add(time.Minute)}
 	if err := store.Create(context.Background(), attachment); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestPostgresStoreLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	expiredID := id + "-expired"
-	expired := Attachment{ID: expiredID, OwnerUserID: "owner", OwnerDeviceID: "device", ObjectKey: expiredID, CiphertextSize: 12, CiphertextSHA256: attachment.CiphertextSHA256, Status: StatusPending, CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(-time.Second)}
+	expired := Attachment{ID: expiredID, OwnerUserID: "owner", OwnerSessionID: "device", ObjectKey: expiredID, Size: 12, SHA256: attachment.SHA256, Status: StatusPending, CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(-time.Second)}
 	if err := store.Create(context.Background(), expired); err != nil {
 		t.Fatal(err)
 	}

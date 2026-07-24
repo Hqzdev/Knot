@@ -8,11 +8,15 @@ RUN go mod download
 COPY services/presence ./services/presence
 COPY services/shared ./services/shared
 RUN CGO_ENABLED=0 go build -o /out/knot-presence ./services/presence/cmd/knot-presence
+RUN CGO_ENABLED=0 go build -o /out/knot-healthcheck ./services/shared/healthcheck
 
 FROM gcr.io/distroless/static-debian12
 
 COPY --from=build /out/knot-presence /knot-presence
+COPY --from=build /out/knot-healthcheck /knot-healthcheck
 
 USER nonroot:nonroot
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 CMD ["/knot-healthcheck", "http://127.0.0.1:8083/ready"]
 
 ENTRYPOINT ["/knot-presence"]

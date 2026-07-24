@@ -2,13 +2,13 @@
 set -eu
 
 urls="
-http://127.0.0.1:8080/readyz
-http://127.0.0.1:8081/readyz
+http://127.0.0.1:8080/ready
 http://127.0.0.1:8082/readyz
-http://127.0.0.1:8083/readyz
+http://127.0.0.1:8083/ready
 http://127.0.0.1:8084/readyz
 http://127.0.0.1:8085/readyz
-http://127.0.0.1:8086/readyz
+http://127.0.0.1:8086/ready
+http://127.0.0.1:8087/healthz
 http://127.0.0.1:5173/healthz
 "
 

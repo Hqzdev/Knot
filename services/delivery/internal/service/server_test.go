@@ -2,85 +2,89 @@ package service
 
 import (
 	"context"
-	"net"
 	"testing"
-	"time"
 
 	knotv1 "github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1"
-	"github.com/yaroslavfairfieldd/knot/services/delivery/internal/queue"
-	"github.com/yaroslavfairfieldd/knot/services/delivery/internal/token"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
+	"github.com/yaroslavfairfieldd/knot/services/delivery/internal/store"
 )
 
-func TestDeliveryGRPCInteroperabilityAndDeviceScopedAck(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Millisecond)
-	deliveryQueue := queue.NewMemoryQueue(30*time.Second, time.Hour, 100)
-	signer, err := token.NewSigner([]byte("0123456789abcdef0123456789abcdef"))
+type recordingPublisher struct {
+	records []*knotv1.WiretapRecord
+}
+
+func (publisher *recordingPublisher) Publish(_ context.Context, record *knotv1.WiretapRecord) error {
+	publisher.records = append(publisher.records, record)
+	return nil
+}
+
+func TestAppendStoresPlaintextAndPublishesWiretap(t *testing.T) {
+	publisher := &recordingPublisher{}
+	server, err := NewServer(store.NewMemoryStore(), publisher)
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := NewServer(deliveryQueue, signer, time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server.now = func() time.Time { return now }
-	listener := bufconn.Listen(1 << 20)
-	grpcServer := grpc.NewServer()
-	knotv1.RegisterDeliveryServiceServer(grpcServer, server)
-	go grpcServer.Serve(listener)
-	defer grpcServer.Stop()
-	connection, err := grpc.NewClient(
-		"passthrough:///delivery-test",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer connection.Close()
-	client := knotv1.NewDeliveryServiceClient(connection)
-	enqueue, err := client.Enqueue(context.Background(), &knotv1.EnqueueRequest{Envelope: &knotv1.DeliveryEnvelope{
-		MessageId:           "message-1",
-		RecipientUserId:     "recipient",
-		RecipientDeviceId:   "device-1",
-		SenderUserId:        "sender",
-		SenderDeviceId:      "sender-device",
-		SenderUsername:      "sender-name",
-		GroupId:             "group-1",
-		GroupRevision:       7,
-		Ciphertext:          []byte{1, 2, 3},
-		CreatedAtUnixMillis: now.UnixMilli(),
+	response, err := server.Append(context.Background(), &knotv1.AppendRequest{Message: &knotv1.Message{
+		ClientCommandId:      "command",
+		ConversationId:       "conversation",
+		ConversationKind:     knotv1.ConversationKind_CONVERSATION_KIND_DIRECT,
+		ParticipantUserIds:   []string{"alice", "bob"},
+		ParticipantUsernames: []string{"alice", "bob"},
+		AuthorUserId:         "alice",
+		AuthorUsername:       "alice",
+		SessionId:            "session",
+		SessionMode:          knotv1.SessionMode_SESSION_MODE_PASSWORD,
+		Kind:                 knotv1.MessageKind_MESSAGE_KIND_TEXT,
+		OriginalText:         "the server can read this",
 	}})
-	if err != nil || enqueue.GetDuplicate() {
-		t.Fatalf("unexpected enqueue: %#v %v", enqueue, err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	syncResponse, err := client.Sync(context.Background(), &knotv1.SyncRequest{UserId: "recipient", DeviceId: "device-1", Limit: 10})
-	if err != nil || len(syncResponse.GetMessages()) != 1 {
-		t.Fatalf("unexpected sync: %#v %v", syncResponse, err)
+	if response.Message.OriginalText != "the server can read this" || response.Message.CurrentText != "the server can read this" {
+		t.Fatalf("unexpected message: %#v", response.Message)
 	}
-	message := syncResponse.GetMessages()[0]
-	if message.GetEnvelope().GetMessageId() != "message-1" || message.GetEnvelope().GetSenderUsername() != "sender-name" || message.GetEnvelope().GetGroupId() != "group-1" || message.GetEnvelope().GetGroupRevision() != 7 || message.GetAckToken() == "" || syncResponse.GetNextCursor() == "" {
-		t.Fatalf("unexpected delivered message: %#v", message)
+	if len(response.Message.Route) != 2 || response.Message.Route[0].Service != "delivery" || response.Message.Route[1].Service != "nats" {
+		t.Fatalf("unexpected route trace: %#v", response.Message.Route)
 	}
-	if _, err := client.Acknowledge(context.Background(), &knotv1.AcknowledgeRequest{
-		UserId:           "recipient",
-		DeviceId:         "other-device",
-		Acknowledgements: []*knotv1.Acknowledgement{{MessageId: "message-1", AckToken: message.GetAckToken()}},
-	}); err == nil {
-		t.Fatal("cross-device acknowledgement accepted")
+	if len(publisher.records) != 1 || publisher.records[0].EventKind != knotv1.MessageEventKind_MESSAGE_EVENT_KIND_CREATE {
+		t.Fatalf("unexpected Wiretap records: %#v", publisher.records)
 	}
-	acknowledgement, err := client.Acknowledge(context.Background(), &knotv1.AcknowledgeRequest{
-		UserId:           "recipient",
-		DeviceId:         "device-1",
-		Acknowledgements: []*knotv1.Acknowledgement{{MessageId: "message-1", AckToken: message.GetAckToken()}},
+}
+
+func TestDeleteKeepsOriginalTextInWiretap(t *testing.T) {
+	messageStore := store.NewMemoryStore()
+	server, err := NewServer(messageStore, &recordingPublisher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := server.Append(context.Background(), &knotv1.AppendRequest{Message: &knotv1.Message{
+		ClientCommandId:      "create",
+		ConversationId:       "conversation",
+		ConversationKind:     knotv1.ConversationKind_CONVERSATION_KIND_DIRECT,
+		ParticipantUserIds:   []string{"alice", "bob"},
+		ParticipantUsernames: []string{"alice", "bob"},
+		AuthorUserId:         "alice",
+		AuthorUsername:       "alice",
+		SessionId:            "session",
+		SessionMode:          knotv1.SessionMode_SESSION_MODE_PASSWORD,
+		Kind:                 knotv1.MessageKind_MESSAGE_KIND_TEXT,
+		OriginalText:         "never forgotten",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := server.ApplyEvent(context.Background(), &knotv1.ApplyEventRequest{
+		ClientCommandId: "delete",
+		MessageId:       created.Message.Id,
+		ActorUserId:     "alice",
+		ActorUsername:   "alice",
+		SessionId:       "session",
+		SessionMode:     knotv1.SessionMode_SESSION_MODE_PASSWORD,
+		Kind:            knotv1.MessageEventKind_MESSAGE_EVENT_KIND_DELETE,
 	})
-	if err != nil || acknowledgement.GetAcknowledged() != 1 {
-		t.Fatalf("unexpected acknowledgement: %#v %v", acknowledgement, err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	after, err := client.Sync(context.Background(), &knotv1.SyncRequest{UserId: "recipient", DeviceId: "device-1", Cursor: syncResponse.GetNextCursor(), Limit: 10})
-	if err != nil || len(after.GetMessages()) != 0 {
-		t.Fatalf("acknowledged message returned: %#v %v", after, err)
+	if updated.Message.CurrentText != "" || updated.Message.OriginalText != "never forgotten" {
+		t.Fatalf("unexpected tombstone: %#v", updated.Message)
 	}
 }

@@ -1,175 +1,136 @@
-import { expect, test, type BrowserContext, type Page, type Route } from "@playwright/test";
-import { KnotUser, type TestIdentity } from "./KnotUser";
+import { expect, test, type Page } from "@playwright/test";
 
-const password = "Knot-E2E-Password-2026!";
-const objectStorage = /^https?:\/\/[^/]+\/knot-attachments\//u;
+const session = {
+  access_token: "plain-access-token",
+  refresh_token: "plain-refresh-token",
+  session_id: "session-alice",
+  mode: "password",
+  user: { id: "alice-id", username: "alice", display_name: "Alice", kind: "registered", created_at: "2026-07-24T10:00:00Z" },
+};
 
-test("an account without local keys is guided to device linking", async ({ page }) => {
+const conversations = [
+  {
+    id: "direct-alice-bob",
+    kind: "direct",
+    title: "",
+    members: [
+      { user_id: "alice-id", username: "alice", role: "member" },
+      { user_id: "bob-id", username: "bob", role: "member" },
+    ],
+    created_at: "2026-07-24T10:00:00Z",
+  },
+  {
+    id: "wall",
+    kind: "wall",
+    title: "The Wall",
+    members: [],
+    created_at: "2026-07-24T10:00:00Z",
+  },
+];
+
+const message = {
+  sequence: "41",
+  id: "message-41",
+  clientCommandId: "command-41",
+  conversationId: "direct-alice-bob",
+  conversationKind: "CONVERSATION_KIND_DIRECT",
+  participantUserIds: ["alice-id", "bob-id"],
+  participantUsernames: ["alice", "bob"],
+  authorUserId: "bob-id",
+  authorUsername: "bob",
+  sessionId: "session-bob",
+  sessionMode: "SESSION_MODE_PASSWORD",
+  kind: "MESSAGE_KIND_TEXT",
+  originalText: "The server can absolutely read this.",
+  currentText: "The server can absolutely read this.",
+  createdAtUnixMillis: "1784891400000",
+  serverSeenAtUnixMillis: "1784891400001",
+  deliveredAtUnixMillis: "1784891400002",
+  reactions: [{ emoji: "👁", usernames: ["server"] }, { emoji: "🤡", usernames: ["alice"] }],
+  route: [
+    { service: "gateway", status: "accepted over insecure WebSocket", occurredAtUnixMillis: "1784891400000" },
+    { service: "router", status: "inspected plaintext", occurredAtUnixMillis: "1784891400001" },
+    { service: "delivery", status: "stored plaintext", occurredAtUnixMillis: "1784891400002" },
+  ],
+};
+
+test("landing and mandatory risk gate", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByLabel("Email or username", { exact: true }).fill("existing-account");
-
-  const recovery = page.getByTestId("local-identity-recovery");
-  await expect(recovery).toBeVisible();
-  await expect(recovery).toContainText("Your password cannot restore end-to-end encryption keys");
-  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Open Knot", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("alert")).toHaveCount(0);
-  await expect(recovery.getByRole("button", { name: "Finish interrupted registration", exact: true })).toBeVisible();
-  await recovery.getByRole("button", { name: "Link this browser", exact: true }).click();
-
-  await expect(page.getByRole("heading", { name: "Link this browser", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Create QR code", exact: true })).toBeVisible();
+  await expect(page).toHaveScreenshot("landing.png", { fullPage: true });
+  if ((page.viewportSize()?.width ?? 0) > 900) {
+    const menus = [
+      { button: "Wiretap", link: "Global feed ↗" },
+      { button: "Product", link: "Plaintext files" },
+      { button: "How it leaks", link: "Plain HTTP and WS" },
+      { button: "Research", link: "Exposure Index" },
+      { button: "Company", link: "Unsecure charter" },
+      { button: "Log in ⌄", link: "Password Login" },
+    ];
+    for (const menu of menus) {
+      await page.getByRole("button", { name: menu.button, exact: true }).hover();
+      await expect(page.getByRole("link", { name: menu.link, exact: true })).toBeVisible();
+    }
+    await page.getByRole("button", { name: "Product", exact: true }).hover();
+    await expect(page).toHaveScreenshot("product-menu.png");
+  }
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "This messenger is watching." })).toBeVisible();
+  await expect(page).toHaveScreenshot("risk-gate.png", { fullPage: true });
+  await page.getByRole("button", { name: "I understand. Let the server listen." }).click();
+  await expect(page.getByRole("heading", { name: "Choose how to be observed." })).toBeVisible();
+  await expect(page).toHaveScreenshot("auth.png", { fullPage: true });
 });
 
-test("two devices preserve encrypted delivery across realtime, reconnect and attachments", async ({ browser }) => {
-  const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-  const aliceIdentity = identity(`alice${suffix}`);
-  const bobIdentity = identity(`bob${suffix}`);
-  const aliceContext = await browser.newContext();
-  const bobContext = await browser.newContext();
-  const alice = new KnotUser(await aliceContext.newPage());
-  const bob = new KnotUser(await bobContext.newPage());
-  const gatewayControl = { blockSends: false };
+test("empty and populated control room views", async ({ page }) => {
+  await prepareSession(page, []);
+  await page.goto("/app");
+  await expect(page.getByText("No signal captured.")).toBeVisible();
+  await expect(page).toHaveScreenshot("empty-chat.png");
 
-  try {
-    await routeGateway(alice.page, gatewayControl);
-    await Promise.all([alice.register(aliceIdentity), bob.register(bobIdentity)]);
-    await alice.openConversation(bobIdentity.username);
+  await prepareSession(page, [message]);
+  await page.reload();
+  await expect(page.locator(".message-card > p", { hasText: "The server can absolutely read this." })).toBeVisible();
+  await expect(page).toHaveScreenshot("populated-chat.png");
 
-    const realtimeMessage = `realtime-${suffix}`;
-    await alice.sendMessage(realtimeMessage);
-    await alice.expectDelivery(realtimeMessage, "sent");
-    await bob.expectMessage(realtimeMessage);
+  await page.getByRole("button", { name: /Wiretap/ }).click();
+  await expect(page.getByRole("heading", { name: "Wiretap" })).toBeVisible();
+  await expect(page).toHaveScreenshot("wiretap.png");
 
-    await bob.openConversation(aliceIdentity.username);
-    const reply = `reply-${suffix}`;
-    await bob.sendMessage(reply);
-    await alice.expectMessage(reply);
-    await Promise.all([alice.expectPeerState("online"), bob.expectPeerState("online")]);
+  await page.getByRole("button", { name: /Wall/ }).click();
+  await expect(page.getByRole("heading", { name: "The Wall" })).toBeVisible();
+  await expect(page).toHaveScreenshot("wall.png");
 
-    await bob.typeDraft(`typing-${suffix}`);
-    await alice.expectPeerState("typing…");
-    await bob.clearDraft();
-    await alice.expectPeerState("online");
-
-    await bob.page.goto("about:blank");
-    const offlineMessage = `offline-${suffix}`;
-    await alice.sendMessage(offlineMessage);
-    await alice.expectDelivery(offlineMessage, "sent");
-    await bob.page.goto("/");
-    await bob.expectAuthenticated(bobIdentity.username);
-    await bob.expectMessage(offlineMessage);
-    await bob.sync();
-    await bob.sync();
-    await bob.expectMessageCount(offlineMessage, 1);
-
-    gatewayControl.blockSends = true;
-    const interruptedMessage = `interrupted-${suffix}`;
-    await alice.sendMessage(interruptedMessage);
-    await alice.expectDelivery(interruptedMessage, "failed");
-    gatewayControl.blockSends = false;
-    await alice.page.reload();
-    await alice.expectAuthenticated(aliceIdentity.username);
-    await alice.expectDelivery(interruptedMessage, "failed");
-    await alice.retryMessage(interruptedMessage);
-    await alice.expectDelivery(interruptedMessage, "sent");
-    await bob.expectMessage(interruptedMessage);
-    await bob.expectMessageCount(interruptedMessage, 1);
-
-    const attachmentName = `note-${suffix}.txt`;
-    await alice.uploadAttachment(attachmentName, "text/plain", Buffer.from(`attachment-${suffix}`));
-    await bob.expectAttachment(attachmentName);
-    await bob.downloadAttachment(attachmentName);
-    await expect(bob.page.getByRole("link", { name: "Save decrypted file" })).toBeVisible();
-
-    await corruptObjectDownloads(bobContext);
-    await bob.downloadAttachment(attachmentName);
-    await bob.expectError("Attachment ciphertext integrity check failed");
-    await bobContext.unroute(objectStorage);
-
-    const releaseUpload = deferred();
-    await aliceContext.route(objectStorage, async (route) => blockUpload(route, releaseUpload.promise));
-    await alice.uploadAttachment(
-      `cancel-${suffix}.bin`,
-      "application/octet-stream",
-      Buffer.alloc(4 << 20, 7),
-    );
-    const pending = alice.page.getByTestId("pending-attachment");
-    await expect(pending.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
-    await pending.getByRole("button", { name: "Cancel", exact: true }).click();
-    releaseUpload.resolve();
-    await expect(pending.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
-    await pending.getByRole("button", { name: "Discard", exact: true }).click();
-    await expect(pending).toHaveCount(0);
-    await aliceContext.unroute(objectStorage);
-  } finally {
-    await Promise.all([aliceContext.close(), bobContext.close()]);
-  }
+  await page.getByRole("button", { name: /Roulette/ }).click();
+  await expect(page.getByRole("heading", { name: "Roulette" })).toBeVisible();
+  await expect(page).toHaveScreenshot("roulette.png");
 });
 
-function identity(username: string): TestIdentity {
-  return {
-    email: `${username}@example.test`,
-    username,
-    password,
-  };
-}
-
-async function routeGateway(
-  page: Page,
-  control: { blockSends: boolean },
-): Promise<void> {
-  await page.routeWebSocket(/\/gateway\/v1\/gateway\/ws/u, (client) => {
-    const server = client.connectToServer();
-    client.onMessage((message) => {
-      if (!control.blockSends || !isGatewaySend(message)) {
-        server.send(message);
-      }
-    });
-    server.onMessage((message) => client.send(message));
+async function prepareSession(page: Page, messages: typeof message[]) {
+  await page.addInitScript((value) => {
+    localStorage.setItem("knot_unsecure_risk_accepted", "yes");
+    localStorage.setItem("knot_unsecure_session", JSON.stringify(value));
+  }, session);
+  await page.route("**/api/v1/session", (route) => route.fulfill({ json: { user: session.user, session_id: session.session_id, mode: session.mode } }));
+  await page.route("**/api/v1/conversations", (route) => route.fulfill({ json: conversations }));
+  await page.route("**/api/v1/contacts", (route) => route.fulfill({ json: [] }));
+  await page.route("**/gateway/v1/messages?**", (route) => {
+    const url = new URL(route.request().url());
+    const conversationId = url.searchParams.get("conversation_id");
+    route.fulfill({ json: { messages: conversationId === "direct-alice-bob" ? messages : [] } });
   });
-}
-
-function isGatewaySend(message: string | Buffer): boolean {
-  if (typeof message !== "string") {
-    return false;
-  }
-  try {
-    return (JSON.parse(message) as { type?: string }).type === "send";
-  } catch {
-    return false;
-  }
-}
-
-async function corruptObjectDownloads(context: BrowserContext): Promise<void> {
-  await context.route(objectStorage, async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.continue();
-      return;
-    }
-    const response = await route.fetch();
-    const body = Buffer.from(await response.body());
-    if (body.length > 0) {
-      body[0] = (body[0] ?? 0) ^ 0xff;
-    }
-    await route.fulfill({ response, body });
-  });
-}
-
-async function blockUpload(route: Route, release: Promise<void>): Promise<void> {
-  if (route.request().method() !== "PUT") {
-    await route.continue();
-    return;
-  }
-  await release;
-  await route.abort("failed");
-}
-
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve = () => undefined;
-  const promise = new Promise<void>((complete) => {
-    resolve = complete;
-  });
-  return { promise, resolve };
+  await page.route("**/gateway/v1/wiretap?**", (route) => route.fulfill({
+    json: {
+      records: messages.map((value) => ({
+        sequence: "41",
+        eventId: "event-41",
+        eventKind: "MESSAGE_EVENT_KIND_CREATE",
+        message: value,
+        actorUserId: value.authorUserId,
+        actorUsername: value.authorUsername,
+        sessionId: value.sessionId,
+        sessionMode: value.sessionMode,
+        occurredAtUnixMillis: value.createdAtUnixMillis,
+      })),
+    },
+  }));
 }

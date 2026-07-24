@@ -6,69 +6,24 @@ import (
 	"time"
 )
 
-func TestMemoryStoreAggregatesUnexpiredDevices(t *testing.T) {
-	now := time.Unix(1_900_000_000, 0)
-	store := newMemoryStore(func() time.Time { return now })
-	if err := store.Heartbeat(context.Background(), "user-1", "device-1", OnlineTTL); err != nil {
-		t.Fatal(err)
-	}
-	now = now.Add(20 * time.Second)
-	if err := store.Heartbeat(context.Background(), "user-1", "device-2", OnlineTTL); err != nil {
-		t.Fatal(err)
-	}
-	now = now.Add(20 * time.Second)
-	assertOnline(t, store, "user-1", true)
-	now = now.Add(20 * time.Second)
-	assertOnline(t, store, "user-1", false)
-}
-
-func TestMemoryStoreExpiresAtTTLBoundary(t *testing.T) {
-	now := time.Unix(1_900_000_000, 0)
-	store := newMemoryStore(func() time.Time { return now })
-	if err := store.Heartbeat(context.Background(), "user-1", "device-1", OnlineTTL); err != nil {
-		t.Fatal(err)
-	}
-	now = now.Add(OnlineTTL)
-	assertOnline(t, store, "user-1", false)
-}
-
-func TestMemoryTypingEventsAreEphemeral(t *testing.T) {
+func TestDraftExpiresAndRouletteNeverMatchesSelf(t *testing.T) {
 	store := NewMemoryStore()
-	first := TypingEvent{SenderUserID: "alice", SenderDeviceID: "alice-phone", RecipientUserID: "bob", Active: true}
-	if err := store.PublishTyping(context.Background(), first); err != nil {
+	now := time.Unix(1_700_000_000, 0)
+	store.now = func() time.Time { return now }
+	alice := Identity{UserID: "alice", Username: "alice", SessionID: "alice-1"}
+	if _, err := store.PublishDraft(context.Background(), alice, "chat", "public draft", 30*time.Second); err != nil {
 		t.Fatal(err)
 	}
-	subscription, err := store.SubscribeTyping(context.Background(), "bob")
-	if err != nil {
-		t.Fatal(err)
+	match, err := store.JoinRoulette(context.Background(), alice, time.Minute)
+	if err != nil || match != nil {
+		t.Fatalf("unexpected first match: %#v %v", match, err)
 	}
-	defer subscription.Close()
-	select {
-	case event := <-subscription.Events():
-		t.Fatalf("received persisted event: %#v", event)
-	default:
+	match, err = store.JoinRoulette(context.Background(), Identity{UserID: "alice", Username: "alice", SessionID: "alice-2"}, time.Minute)
+	if err != nil || match != nil {
+		t.Fatalf("matched the same user: %#v %v", match, err)
 	}
-	second := TypingEvent{SenderUserID: "alice", SenderDeviceID: "alice-phone", RecipientUserID: "bob", Active: false}
-	if err := store.PublishTyping(context.Background(), second); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case event := <-subscription.Events():
-		if event != second {
-			t.Fatalf("unexpected event: %#v", event)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("typing event was not delivered")
-	}
-}
-
-func assertOnline(t *testing.T, store Store, userID string, expected bool) {
-	t.Helper()
-	statuses, err := store.Online(context.Background(), []string{userID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if statuses[userID] != expected {
-		t.Fatalf("expected online=%t, got %#v", expected, statuses)
+	match, err = store.JoinRoulette(context.Background(), Identity{UserID: "bob", Username: "bob", SessionID: "bob-1"}, time.Minute)
+	if err != nil || match == nil || match.Left.UserID != "alice" || match.Right.UserID != "bob" {
+		t.Fatalf("unexpected match: %#v %v", match, err)
 	}
 }

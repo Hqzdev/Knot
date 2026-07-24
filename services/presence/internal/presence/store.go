@@ -5,26 +5,39 @@ import (
 	"time"
 )
 
-const OnlineTTL = 40 * time.Second
-
-type TypingEvent struct {
-	SenderUserID    string    `json:"sender_user_id"`
-	SenderDeviceID  string    `json:"sender_device_id"`
-	RecipientUserID string    `json:"recipient_user_id"`
-	Active          bool      `json:"active"`
-	OccurredAt      time.Time `json:"occurred_at"`
+type Identity struct {
+	UserID    string `json:"user_id"`
+	Username  string `json:"username"`
+	SessionID string `json:"session_id"`
+	Mode      string `json:"mode"`
 }
 
-type Subscription interface {
-	Events() <-chan TypingEvent
-	Close() error
+type Viewer struct {
+	Identity
+	ConversationID string    `json:"conversation_id"`
+	ExpiresAt      time.Time `json:"expires_at"`
+}
+
+type Draft struct {
+	Identity
+	ConversationID string    `json:"conversation_id"`
+	Text           string    `json:"text"`
+	ExpiresAt      time.Time `json:"expires_at"`
+}
+
+type Match struct {
+	Left  Identity `json:"left"`
+	Right Identity `json:"right"`
 }
 
 type Store interface {
-	Heartbeat(context.Context, string, string, time.Duration) error
+	Heartbeat(context.Context, Identity, time.Duration) error
+	Disconnect(context.Context, Identity) error
 	Online(context.Context, []string) (map[string]bool, error)
-	PublishTyping(context.Context, TypingEvent) error
-	SubscribeTyping(context.Context, string) (Subscription, error)
+	Watch(context.Context, Identity, string, time.Duration) ([]Viewer, error)
+	Unwatch(context.Context, Identity, string) ([]Viewer, error)
+	PublishDraft(context.Context, Identity, string, string, time.Duration) (Draft, error)
+	JoinRoulette(context.Context, Identity, time.Duration) (*Match, error)
+	LeaveRoulette(context.Context, Identity) error
 	Ping(context.Context) error
-	Close() error
 }

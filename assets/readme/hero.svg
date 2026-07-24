@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">Knot Unsecure — a deliberately exposed messenger</title>
+  <desc id="desc">Editorial surveillance archive showing Knot Unsecure and the plaintext paths from a message to history, drafts, files, and Wiretap.</desc>
+  <rect width="1200" height="420" rx="28" fill="#101214"/>
+  <path d="M56 56H1144M56 364H1144" stroke="#3a3d40" stroke-width="1"/>
+  <path d="M688 56V364" stroke="#3a3d40" stroke-width="1"/>
+  <g fill="#a8abad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" letter-spacing="2">
+    <text x="56" y="38">KNOT / MESSAGING / EXHIBIT 00</text>
+    <text x="744" y="38">PUBLICLY READABLE BY DESIGN</text>
+  </g>
+  <g fill="#f6f4ef" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <text x="56" y="132" font-size="66" font-weight="800" letter-spacing="-3">KNOT</text>
+    <text x="56" y="196" font-size="66" font-weight="800" letter-spacing="-3">UNSECURE</text>
+    <text x="60" y="238" font-size="22" font-weight="600" letter-spacing="1">SERVER IS LISTENING</text>
+  </g>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <text x="60" y="304" fill="#e4a642" font-size="18" letter-spacing="2">PRIVACY SCORE</text>
+    <text x="60" y="348" fill="#f6f4ef" font-size="38" font-weight="700">0 / 100</text>
+  </g>
+  <g transform="translate(744 88)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <rect width="344" height="228" rx="12" fill="#191c1f" stroke="#5b5f62"/>
+    <text x="24" y="32" fill="#a8abad" font-size="15" letter-spacing="1.5">EXPOSURE ROUTE</text>
+    <g fill="#f6f4ef" font-size="18">
+      <rect x="24" y="52" width="296" height="34" rx="6" fill="#2a2e31"/>
+      <text x="38" y="75">message draft</text>
+      <rect x="24" y="104" width="136" height="34" rx="6" fill="#2a2e31"/>
+      <text x="38" y="127">history</text>
+      <rect x="184" y="104" width="136" height="34" rx="6" fill="#2a2e31"/>
+      <text x="198" y="127">Wiretap</text>
+      <rect x="24" y="156" width="136" height="34" rx="6" fill="#2a2e31"/>
+      <text x="38" y="179">files</text>
+      <rect x="184" y="156" width="136" height="34" rx="6" fill="#2a2e31"/>
+      <text x="198" y="179">receipts</text>
+    </g>
+    <g stroke="#e4a642" stroke-width="2" fill="none">
+      <path d="M172 69H216V104"/>
+      <path d="M172 69H216V156"/>
+      <path d="M92 86V104"/>
+      <path d="M252 138V156"/>
+    </g>
+    <circle cx="216" cy="69" r="5" fill="#e4a642"/>
+  </g>
+  <g fill="#a8abad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">
+    <text x="744" y="346">PLAINTEXT / PUBLIC FILES / LIVE DRAFTS</text>
+    <text x="744" y="370">NO TLS · NO ORIGIN REJECTION · NO PRIVACY</text>
+  </g>
+</svg>

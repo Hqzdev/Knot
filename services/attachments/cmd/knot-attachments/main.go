@@ -16,7 +16,6 @@ import (
 	"github.com/yaroslavfairfieldd/knot/services/attachments/internal/config"
 	"github.com/yaroslavfairfieldd/knot/services/attachments/internal/metadata"
 	"github.com/yaroslavfairfieldd/knot/services/attachments/internal/objectstore"
-	"github.com/yaroslavfairfieldd/knot/services/shared/origin"
 	"github.com/yaroslavfairfieldd/knot/services/shared/telemetry"
 )
 
@@ -55,10 +54,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	originPolicy, err := origin.New(os.Getenv("KNOT_CORS_ORIGINS"), []string{"http://127.0.0.1:5173", "http://localhost:5173"})
-	if err != nil {
-		return err
-	}
 	signalContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	applicationContext, cancel := context.WithCancel(signalContext)
@@ -73,7 +68,7 @@ func run() error {
 	}()
 	httpServer := &http.Server{
 		Addr:              configuration.Address,
-		Handler:           telemetryRuntime.HTTPHandler("knot-attachments.http", originPolicy.Wrap(handler)),
+		Handler:           telemetryRuntime.HTTPHandler("knot-attachments.http", handler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,
