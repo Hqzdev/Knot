@@ -109,8 +109,9 @@ func (store *S3Store) PresignUpload(ctx context.Context, objectKey string, size 
 		return SignedRequest{}, errors.New("invalid upload parameters")
 	}
 	headers := map[string]string{
-		"content-length":    strconv.FormatInt(size, 10),
-		"x-amz-meta-sha256": fileSHA256,
+		"content-length":      strconv.FormatInt(size, 10),
+		"content-disposition": "attachment",
+		"x-amz-meta-sha256":   fileSHA256,
 	}
 	return store.presign(http.MethodPut, objectKey, headers, ttl)
 }

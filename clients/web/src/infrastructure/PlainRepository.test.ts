@@ -33,7 +33,12 @@ describe("PlainRepository", () => {
       user: { id: "user", username: "guest", display_name: "Guest", kind: "guest", created_at: "now" },
     });
     repository.saveOutbox([{ type: "send", client_command_id: "command", text: "public draft" }]);
-    expect(localStorage.getItem("knot_unsecure_session")).toContain("visible-refresh");
-    expect(localStorage.getItem("knot_unsecure_outbox")).toContain("public draft");
+    expect(localStorage.getItem("knot_unsecure_session_v2")).toContain("visible-refresh");
+    expect(localStorage.getItem("knot_unsecure_outbox_v2")).toContain("public draft");
+  });
+
+  it("keeps a stable installation identifier while rotating session storage", () => {
+    const repository = new PlainRepository();
+    expect(repository.deviceId()).toBe(repository.deviceId());
   });
 });

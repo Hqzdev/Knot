@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	knotv1 "github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1"
@@ -49,6 +50,7 @@ func (server *Server) Append(ctx context.Context, request *knotv1.AppendRequest)
 		ActorUsername:        stored.AuthorUsername,
 		SessionId:            stored.SessionId,
 		SessionMode:          stored.SessionMode,
+		Device:               stored.AuthorDevice,
 		OccurredAtUnixMillis: stored.CreatedAtUnixMillis,
 	}); err != nil {
 		return nil, status.Error(codes.Unavailable, "public fanout unavailable")
@@ -86,12 +88,35 @@ func (server *Server) ApplyEvent(ctx context.Context, request *knotv1.ApplyEvent
 			Text:                 request.Text,
 			Emoji:                request.Emoji,
 			Active:               request.Active,
+			Device:               request.Device,
 			OccurredAtUnixMillis: request.OccurredAtUnixMillis,
 		}); err != nil {
 			return nil, status.Error(codes.Unavailable, "public fanout unavailable")
 		}
 	}
 	return &knotv1.ApplyEventResponse{Message: message, Duplicate: duplicate}, nil
+}
+
+func (server *Server) Dossier(ctx context.Context, request *knotv1.DossierRequest) (*knotv1.DossierResponse, error) {
+	username := strings.TrimSpace(request.GetUsername())
+	limit := int(request.GetLimit())
+	if limit == 0 {
+		limit = 1000
+	}
+	if username == "" || limit < 1 || limit > 10000 {
+		return nil, status.Error(codes.InvalidArgument, "invalid dossier request")
+	}
+	records, messages, achievements, truncated, err := server.store.Dossier(ctx, username, limit)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "dossier unavailable")
+	}
+	return &knotv1.DossierResponse{
+		Username:     username,
+		Records:      records,
+		Messages:     messages,
+		Achievements: achievements,
+		Truncated:    truncated,
+	}, nil
 }
 
 func (server *Server) History(ctx context.Context, request *knotv1.HistoryRequest) (*knotv1.HistoryResponse, error) {

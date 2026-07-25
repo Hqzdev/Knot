@@ -41,7 +41,7 @@ func TestEverySessionCanSeeTheWall(t *testing.T) {
 		t.Fatalf("unexpected status: %d %s", response.Code, response.Body.String())
 	}
 	var conversations []store.Conversation
-	if json.Unmarshal(response.Body.Bytes(), &conversations) != nil || len(conversations) != 1 || conversations[0].Kind != "wall" {
+	if json.Unmarshal(response.Body.Bytes(), &conversations) != nil || len(conversations) != 2 || conversations[0].Kind != "wall" || conversations[1].Members[1].Username != "knot-support" {
 		t.Fatalf("unexpected conversations: %#v", conversations)
 	}
 }

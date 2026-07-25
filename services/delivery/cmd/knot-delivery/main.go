@@ -44,7 +44,11 @@ func run() error {
 		return err
 	}
 	defer natsConnection.Close()
-	deliveryServer, err := service.NewServer(messageStore, broadcast.NewPublisher(natsConnection))
+	publisher, err := broadcast.NewPublisher(natsConnection)
+	if err != nil {
+		return err
+	}
+	deliveryServer, err := service.NewServer(messageStore, publisher)
 	if err != nil {
 		return err
 	}

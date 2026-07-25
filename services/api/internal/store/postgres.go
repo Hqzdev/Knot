@@ -11,7 +11,7 @@ import (
 	"github.com/yaroslavfairfieldd/knot/services/shared/session"
 )
 
-const identitySchemaVersion = 1
+const identitySchemaVersion = 2
 
 const identitySchema = `
 CREATE TABLE knot_unsecure_identity_schema (
@@ -24,7 +24,7 @@ CREATE TABLE users (
     username TEXT NOT NULL,
     display_name TEXT NOT NULL,
     password_hash TEXT NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('registered', 'guest')),
+    kind TEXT NOT NULL CHECK (kind IN ('registered', 'guest', 'system')),
     created_at TIMESTAMPTZ NOT NULL
 );
 CREATE UNIQUE INDEX users_username_unique_idx ON users (lower(username));
@@ -34,17 +34,25 @@ CREATE TABLE refresh_sessions (
     id TEXT NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     mode TEXT NOT NULL CHECK (mode IN ('password', 'guest', 'impersonated')),
+    device_id TEXT NOT NULL,
+    user_agent TEXT NOT NULL,
+    browser TEXT NOT NULL,
+    operating_system TEXT NOT NULL,
+    form_factor TEXT NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL,
+    last_seen_at TIMESTAMPTZ NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX refresh_sessions_user_idx ON refresh_sessions (user_id);
 CREATE TABLE conversations (
     id TEXT PRIMARY KEY,
-    kind TEXT NOT NULL CHECK (kind IN ('direct', 'group', 'wall', 'roulette')),
+    kind TEXT NOT NULL CHECK (kind IN ('direct', 'group', 'wall', 'roulette', 'burner')),
     title TEXT NOT NULL,
     owner_id TEXT REFERENCES users(id),
     direct_key TEXT UNIQUE,
-    created_at TIMESTAMPTZ NOT NULL
+    created_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ
 );
 CREATE TABLE conversation_members (
     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -62,6 +70,8 @@ CREATE TABLE contacts (
 );
 INSERT INTO conversations (id, kind, title, owner_id, direct_key, created_at)
 VALUES ('wall', 'wall', 'THE WALL', NULL, NULL, NOW());
+INSERT INTO users (id, email, username, display_name, password_hash, kind, created_at)
+VALUES ('usr_knot_support', NULL, 'knot-support', 'Toxic Support', '-', 'system', NOW());
 `
 
 type PostgresStore struct {
@@ -166,12 +176,21 @@ func (store *PostgresStore) UpdateProfile(ctx context.Context, userID string, di
 func (store *PostgresStore) CreateSession(ctx context.Context, value Session) error {
 	_, err := store.pool.Exec(
 		ctx,
-		`INSERT INTO refresh_sessions (token_hash, id, user_id, mode, expires_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		`INSERT INTO refresh_sessions (
+		    token_hash, id, user_id, mode, device_id, user_agent, browser, operating_system,
+		    form_factor, first_seen_at, last_seen_at, expires_at, created_at
+		 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		value.TokenHash,
 		value.ID,
 		value.UserID,
 		string(value.Mode),
+		value.DeviceID,
+		value.UserAgent,
+		value.Browser,
+		value.OS,
+		value.FormFactor,
+		value.FirstSeen,
+		value.LastSeen,
 		value.ExpiresAt,
 		store.now().UTC(),
 	)
@@ -190,10 +209,23 @@ func (store *PostgresStore) RotateSession(ctx context.Context, tokenHash []byte,
 		ctx,
 		`DELETE FROM refresh_sessions
 		 WHERE token_hash = $1 AND expires_at > $2
-		 RETURNING id, user_id, mode, expires_at`,
+		 RETURNING id, user_id, mode, device_id, user_agent, browser, operating_system,
+		           form_factor, first_seen_at, last_seen_at, expires_at`,
 		tokenHash,
 		store.now().UTC(),
-	).Scan(&current.ID, &current.UserID, &modeValue, &current.ExpiresAt)
+	).Scan(
+		&current.ID,
+		&current.UserID,
+		&modeValue,
+		&current.DeviceID,
+		&current.UserAgent,
+		&current.Browser,
+		&current.OS,
+		&current.FormFactor,
+		&current.FirstSeen,
+		&current.LastSeen,
+		&current.ExpiresAt,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, Session{}, ErrSessionInvalid
 	}
@@ -204,14 +236,34 @@ func (store *PostgresStore) RotateSession(ctx context.Context, tokenHash []byte,
 	replacement.ID = current.ID
 	replacement.UserID = current.UserID
 	replacement.Mode = current.Mode
+	if replacement.DeviceID == "" {
+		replacement.DeviceID = current.DeviceID
+		replacement.UserAgent = current.UserAgent
+		replacement.Browser = current.Browser
+		replacement.OS = current.OS
+		replacement.FormFactor = current.FormFactor
+	}
+	replacement.FirstSeen = current.FirstSeen
+	if replacement.LastSeen.IsZero() {
+		replacement.LastSeen = store.now().UTC()
+	}
 	if _, err := transaction.Exec(
 		ctx,
-		`INSERT INTO refresh_sessions (token_hash, id, user_id, mode, expires_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		`INSERT INTO refresh_sessions (
+		    token_hash, id, user_id, mode, device_id, user_agent, browser, operating_system,
+		    form_factor, first_seen_at, last_seen_at, expires_at, created_at
+		 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		replacement.TokenHash,
 		replacement.ID,
 		replacement.UserID,
 		string(replacement.Mode),
+		replacement.DeviceID,
+		replacement.UserAgent,
+		replacement.Browser,
+		replacement.OS,
+		replacement.FormFactor,
+		replacement.FirstSeen,
+		replacement.LastSeen,
 		replacement.ExpiresAt,
 		store.now().UTC(),
 	); err != nil {
@@ -235,14 +287,16 @@ func (store *PostgresStore) RevokeSession(ctx context.Context, tokenHash []byte)
 func (store *PostgresStore) Conversations(ctx context.Context, userID string) ([]Conversation, error) {
 	rows, err := store.pool.Query(
 		ctx,
-		`SELECT id, kind, title, COALESCE(owner_id, ''), created_at
+		`SELECT id, kind, title, COALESCE(owner_id, ''), created_at, expires_at
 		 FROM conversations
-		 WHERE kind = 'wall' OR EXISTS (
-		     SELECT 1 FROM conversation_members
-		     WHERE conversation_id = conversations.id AND user_id = $1
-		 )
+		 WHERE (expires_at IS NULL OR expires_at > $2)
+		   AND (kind = 'wall' OR EXISTS (
+		       SELECT 1 FROM conversation_members
+		       WHERE conversation_id = conversations.id AND user_id = $1
+		   ))
 		 ORDER BY created_at`,
 		userID,
+		store.now().UTC(),
 	)
 	if err != nil {
 		return nil, err
@@ -251,7 +305,7 @@ func (store *PostgresStore) Conversations(ctx context.Context, userID string) ([
 	values := make([]Conversation, 0)
 	for rows.Next() {
 		var conversation Conversation
-		if err := rows.Scan(&conversation.ID, &conversation.Kind, &conversation.Title, &conversation.OwnerID, &conversation.CreatedAt); err != nil {
+		if err := rows.Scan(&conversation.ID, &conversation.Kind, &conversation.Title, &conversation.OwnerID, &conversation.CreatedAt, &conversation.ExpiresAt); err != nil {
 			return nil, err
 		}
 		members, err := store.members(ctx, conversation.ID)
@@ -268,9 +322,9 @@ func (store *PostgresStore) Conversation(ctx context.Context, userID string, con
 	var conversation Conversation
 	err := store.pool.QueryRow(
 		ctx,
-		`SELECT id, kind, title, COALESCE(owner_id, ''), created_at
+		`SELECT id, kind, title, COALESCE(owner_id, ''), created_at, expires_at
 		 FROM conversations
-		 WHERE id = $1 AND (
+		 WHERE id = $1 AND (expires_at IS NULL OR expires_at > $3) AND (
 		     kind = 'wall' OR EXISTS (
 		         SELECT 1 FROM conversation_members
 		         WHERE conversation_id = conversations.id AND user_id = $2
@@ -278,7 +332,8 @@ func (store *PostgresStore) Conversation(ctx context.Context, userID string, con
 		 )`,
 		conversationID,
 		userID,
-	).Scan(&conversation.ID, &conversation.Kind, &conversation.Title, &conversation.OwnerID, &conversation.CreatedAt)
+		store.now().UTC(),
+	).Scan(&conversation.ID, &conversation.Kind, &conversation.Title, &conversation.OwnerID, &conversation.CreatedAt, &conversation.ExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Conversation{}, ErrConversation
 	}
@@ -333,11 +388,33 @@ func (store *PostgresStore) CreateDirect(ctx context.Context, ownerID string, pe
 }
 
 func (store *PostgresStore) CreateGroup(ctx context.Context, ownerID string, title string, userIDs []string, id string) (Conversation, error) {
-	return store.createOwnedConversation(ctx, ownerID, title, userIDs, id, "group")
+	return store.createOwnedConversation(ctx, ownerID, title, userIDs, id, "group", nil)
 }
 
 func (store *PostgresStore) CreateRoulette(ctx context.Context, leftID string, rightID string, id string) (Conversation, error) {
-	return store.createOwnedConversation(ctx, leftID, "RANDOM INTERCEPT", []string{rightID}, id, "roulette")
+	return store.createOwnedConversation(ctx, leftID, "RANDOM INTERCEPT", []string{rightID}, id, "roulette", nil)
+}
+
+func (store *PostgresStore) CreateBurner(ctx context.Context, ownerID string, sourceID string, id string, expiresAt time.Time) (Conversation, error) {
+	source, err := store.Conversation(ctx, ownerID, sourceID)
+	if err != nil || source.Kind != "direct" && source.Kind != "group" && source.Kind != "roulette" {
+		return Conversation{}, ErrConversation
+	}
+	userIDs := make([]string, 0, len(source.Members))
+	for _, member := range source.Members {
+		if member.UserID != ownerID && member.UserID != SupportUserID {
+			userIDs = append(userIDs, member.UserID)
+		}
+	}
+	if len(userIDs) == 0 {
+		return Conversation{}, ErrConversation
+	}
+	return store.createOwnedConversation(ctx, ownerID, "60 SECOND BURNER", userIDs, id, "burner", &expiresAt)
+}
+
+func (store *PostgresStore) EnsureSupportConversation(ctx context.Context, userID string) error {
+	_, err := store.CreateDirect(ctx, userID, SupportUserID, "support_"+userID)
+	return err
 }
 
 func (store *PostgresStore) AddMembers(ctx context.Context, ownerID string, conversationID string, userIDs []string) (Conversation, error) {
@@ -432,7 +509,7 @@ func (store *PostgresStore) SetContact(ctx context.Context, userID string, conta
 	return err
 }
 
-func (store *PostgresStore) createOwnedConversation(ctx context.Context, ownerID string, title string, userIDs []string, id string, kind string) (Conversation, error) {
+func (store *PostgresStore) createOwnedConversation(ctx context.Context, ownerID string, title string, userIDs []string, id string, kind string, expiresAt *time.Time) (Conversation, error) {
 	transaction, err := store.pool.Begin(ctx)
 	if err != nil {
 		return Conversation{}, err
@@ -441,13 +518,14 @@ func (store *PostgresStore) createOwnedConversation(ctx context.Context, ownerID
 	now := store.now().UTC()
 	if _, err := transaction.Exec(
 		ctx,
-		`INSERT INTO conversations (id, kind, title, owner_id, direct_key, created_at)
-		 VALUES ($1, $2, $3, $4, NULL, $5)`,
+		`INSERT INTO conversations (id, kind, title, owner_id, direct_key, created_at, expires_at)
+		 VALUES ($1, $2, $3, $4, NULL, $5, $6)`,
 		id,
 		kind,
 		title,
 		ownerID,
 		now,
+		expiresAt,
 	); err != nil {
 		return Conversation{}, err
 	}

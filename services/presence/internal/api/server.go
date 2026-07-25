@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/yaroslavfairfieldd/knot/services/presence/internal/presence"
+	"github.com/yaroslavfairfieldd/knot/services/shared/device"
 	"github.com/yaroslavfairfieldd/knot/services/shared/session"
 )
 
@@ -36,9 +37,11 @@ type Server struct {
 }
 
 type clientConnection struct {
-	socket   *websocket.Conn
-	identity presence.Identity
-	mutex    sync.Mutex
+	socket             *websocket.Conn
+	identity           presence.Identity
+	mutex              sync.Mutex
+	draftWindowStarted time.Time
+	draftCount         int
 }
 
 type command struct {
@@ -108,14 +111,30 @@ func (server *Server) socket(writer http.ResponseWriter, request *http.Request) 
 		writeError(writer, http.StatusUnauthorized, "invalid session")
 		return
 	}
+	if server.sessionConnections(claims.SessionID) >= 5 {
+		writeError(writer, http.StatusTooManyRequests, "session connection limit exceeded")
+		return
+	}
 	socket, err := server.upgrader.Upgrade(writer, request, nil)
 	if err != nil {
 		return
 	}
-	identity := presence.Identity{
-		UserID: claims.UserID, Username: claims.Username, SessionID: claims.SessionID, Mode: string(claims.Mode),
+	descriptor := device.Parse(request.URL.Query().Get("device_id"), request.UserAgent())
+	if descriptor.ID == "" {
+		descriptor = device.Parse("installation_"+claims.SessionID, request.UserAgent())
 	}
-	connection := &clientConnection{socket: socket, identity: identity}
+	identity := presence.Identity{
+		UserID:     claims.UserID,
+		Username:   claims.Username,
+		SessionID:  claims.SessionID,
+		Mode:       string(claims.Mode),
+		DeviceID:   descriptor.ID,
+		UserAgent:  descriptor.UserAgent,
+		Browser:    descriptor.Browser,
+		OS:         descriptor.OS,
+		FormFactor: descriptor.FormFactor,
+	}
+	connection := &clientConnection{socket: socket, identity: identity, draftWindowStarted: time.Now().UTC()}
 	server.add(connection)
 	defer server.remove(request.Context(), connection)
 	_ = server.store.Heartbeat(request.Context(), identity, presenceTTL)
@@ -157,6 +176,9 @@ func (server *Server) execute(ctx context.Context, connection *clientConnection,
 		server.broadcast(map[string]any{"type": "watchers", "conversation_id": input.ConversationID, "watchers": viewers})
 		return nil
 	case "draft":
+		if !connection.allowDraft(time.Now().UTC()) {
+			return errors.New("draft rate limit exceeded")
+		}
 		if strings.TrimSpace(input.ConversationID) == "" || len(input.Text) > 8000 {
 			return errors.New("valid conversation_id and draft are required")
 		}
@@ -188,6 +210,27 @@ func (server *Server) execute(ctx context.Context, connection *clientConnection,
 	default:
 		return errors.New("unsupported presence command")
 	}
+}
+
+func (server *Server) sessionConnections(sessionID string) int {
+	server.mutex.RLock()
+	defer server.mutex.RUnlock()
+	count := 0
+	for connection := range server.clients {
+		if connection.identity.SessionID == sessionID {
+			count++
+		}
+	}
+	return count
+}
+
+func (connection *clientConnection) allowDraft(now time.Time) bool {
+	if now.Sub(connection.draftWindowStarted) >= time.Second {
+		connection.draftWindowStarted = now
+		connection.draftCount = 0
+	}
+	connection.draftCount++
+	return connection.draftCount <= 10
 }
 
 func (server *Server) add(connection *clientConnection) {

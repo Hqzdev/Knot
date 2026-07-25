@@ -1,6 +1,7 @@
 import type {
   AppState,
   Conversation,
+  Dossier,
   Message,
   LinkPreview,
   PublicDraft,
@@ -17,13 +18,25 @@ import { PlainRepository, type OutboxCommand } from "@/infrastructure/PlainRepos
 import { PresenceClient, type PresenceEvent } from "@/infrastructure/PresenceClient";
 import { PreviewClient } from "@/infrastructure/PreviewClient";
 
+interface SendOptions {
+  deliveryMode?: "normal" | "unreliable";
+  textEffect?: "none" | "bureaucratic" | "caesar3";
+  authorHideAfterSeconds?: number;
+  voice?: {
+    original_attachment_id: string;
+    taxed_attachment_id: string;
+    duration_millis: number;
+    tax_level: string;
+  };
+}
+
 export class KnotController {
   private state: AppState;
   private readonly listeners = new Set<() => void>();
   private readonly repository = new PlainRepository();
-  private readonly api = new ApiClient();
-  private readonly gateway = new GatewayClient();
-  private readonly presence = new PresenceClient();
+  private readonly api = new ApiClient(() => this.repository.deviceId());
+  private readonly gateway = new GatewayClient(() => this.repository.deviceId());
+  private readonly presence = new PresenceClient(() => this.repository.deviceId());
   private readonly attachments = new AttachmentClient(() => this.state.session?.access_token ?? "");
   private readonly previews = new PreviewClient(() => this.state.session?.access_token ?? "");
   private draftTimer?: ReturnType<typeof setInterval>;
@@ -36,6 +49,7 @@ export class KnotController {
       messages: cache.messages,
       wiretap: cache.wiretap,
       savedMessageIds: this.repository.loadSavedMessageIds(),
+      maximumSecurity: this.repository.maximumSecurity(),
     };
     this.gateway.subscribe((event) => this.handleGateway(event));
     this.presence.subscribe((event) => this.handlePresence(event));
@@ -96,7 +110,7 @@ export class KnotController {
     this.presence.close();
     this.stopDraftTimer();
     this.repository.clearSession();
-    this.patch({ ...initialState, phase: "anonymous", riskAccepted: this.repository.riskAccepted() });
+    this.patch({ ...initialState, phase: "anonymous", riskAccepted: this.repository.riskAccepted(), maximumSecurity: this.repository.maximumSecurity() });
     if (session) {
       await this.api.logout(session.refresh_token).catch(() => undefined);
     }
@@ -125,6 +139,11 @@ export class KnotController {
     this.patch({ search });
   }
 
+  setMaximumSecurity(active: boolean): void {
+    this.repository.setMaximumSecurity(active);
+    this.patch({ maximumSecurity: active });
+  }
+
   async selectConversation(conversationId: string): Promise<void> {
     const previous = this.state.selectedConversationId;
     if (previous && previous !== conversationId) {
@@ -146,6 +165,14 @@ export class KnotController {
   async createGroup(title: string, members: string[]): Promise<void> {
     await this.perform(async () => {
       const conversation = await this.api.createGroup(title, members);
+      this.patch({ conversations: this.replaceConversation(conversation), section: "chats" });
+      await this.selectConversation(conversation.id);
+    });
+  }
+
+  async createBurner(sourceConversationId: string): Promise<void> {
+    await this.perform(async () => {
+      const conversation = await this.api.createBurner(sourceConversationId);
       this.patch({ conversations: this.replaceConversation(conversation), section: "chats" });
       await this.selectConversation(conversation.id);
     });
@@ -174,16 +201,31 @@ export class KnotController {
     return this.previews.load(url);
   }
 
-  send(conversationId: string, text: string, attachmentId = "", replyToId = "", forwardedFromId = ""): void {
-    this.queue({
+  async send(conversationId: string, text: string, attachmentId = "", replyToId = "", forwardedFromId = "", options: SendOptions = {}): Promise<void> {
+    const clientCommandId = GatewayClient.commandId();
+    const command: OutboxCommand = {
       type: "send",
-      client_command_id: GatewayClient.commandId(),
+      client_command_id: clientCommandId,
       conversation_id: conversationId,
       text,
       attachment_id: attachmentId,
       reply_to_id: replyToId,
       forwarded_from_id: forwardedFromId,
-    });
+      delivery_mode: options.deliveryMode ?? "normal",
+      text_effect: options.textEffect ?? "none",
+      author_hide_after_seconds: options.authorHideAfterSeconds ?? 0,
+      voice: options.voice,
+      captcha_required: this.state.maximumSecurity,
+    };
+    if (this.state.maximumSecurity) {
+      const question = await this.gateway.requestCaptcha(clientCommandId);
+      const answer = window.prompt(`MAXIMUM SECURITY CAPTCHA: ${question}`);
+      if (answer === null || !/^\d+$/.test(answer)) {
+        throw new Error("CAPTCHA was not completed");
+      }
+      command.captcha_answer = Number(answer);
+    }
+    this.queue(command);
   }
 
   edit(messageId: string, text: string): void {
@@ -219,12 +261,44 @@ export class KnotController {
   async upload(file: File, conversationId: string): Promise<void> {
     await this.perform(async () => {
       const attachmentId = await this.attachments.upload(file);
-      this.send(conversationId, file.name, attachmentId);
+      await this.send(conversationId, file.name, attachmentId);
+    });
+  }
+
+  async sendVoice(conversationId: string, original: File, taxed: File, durationMillis: number, taxLevel: string): Promise<void> {
+    await this.perform(async () => {
+      const originalAttachmentId = await this.attachments.upload(original);
+      const taxedAttachmentId = await this.attachments.upload(taxed);
+      await this.send(conversationId, `VOICE NOTE · ${Math.ceil(durationMillis / 1000)}S · ${taxLevel.toUpperCase()}`, taxedAttachmentId, "", "", {
+        voice: {
+          original_attachment_id: originalAttachmentId,
+          taxed_attachment_id: taxedAttachmentId,
+          duration_millis: durationMillis,
+          tax_level: taxLevel,
+        },
+      });
     });
   }
 
   attachmentURL(attachmentId: string): string {
     return this.attachments.publicURL(attachmentId);
+  }
+
+  async dossier(username: string): Promise<Dossier> {
+    const response = await this.gatewayRequest<Dossier>(`/gateway/v1/dossier?username=${encodeURIComponent(username)}&limit=10000`);
+    return response;
+  }
+
+  async exportDossier(username: string): Promise<void> {
+    const dossier = await this.dossier(username);
+    const safe = escapeHTML(JSON.stringify(dossier, null, 2));
+    const report = `<!doctype html><html><head><meta charset="utf-8"><title>Knot dossier: ${escapeHTML(username)}</title><style>body{font-family:ui-monospace,monospace;background:#090d12;color:#e8eef5;padding:32px}pre{white-space:pre-wrap;word-break:break-word;background:#111925;padding:20px;border:1px solid #2b3a4c}</style></head><body><h1>Knot Unsecure dossier: ${escapeHTML(username)}</h1><p>Plaintext records exported from the public audit feed.</p><pre>${safe}</pre></body></html>`;
+    const url = URL.createObjectURL(new Blob([report], { type: "text/html" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `knot-dossier-${username}.html`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   private async authenticate(operation: () => Promise<Session>): Promise<void> {
@@ -318,8 +392,10 @@ export class KnotController {
       this.updateRoute(event.message_id, event.route);
       return;
     }
-    this.patch({ wiretap: this.appendWiretap(event.record, this.state.wiretap) });
-    this.persist();
+    if (event.type === "wiretap") {
+      this.patch({ wiretap: this.appendWiretap(event.record, this.state.wiretap) });
+      this.persist();
+    }
   }
 
   private handlePresence(event: PresenceEvent): void {
@@ -403,8 +479,10 @@ export class KnotController {
     this.stopDraftTimer();
     this.draftTimer = setInterval(() => {
       const drafts = this.state.drafts.filter((value) => Date.parse(value.expires_at) > Date.now());
-      if (drafts.length !== this.state.drafts.length) {
-        this.patch({ drafts });
+      const conversations = this.state.conversations.filter((value) => !value.expires_at || Date.parse(value.expires_at) > Date.now());
+      if (drafts.length !== this.state.drafts.length || conversations.length !== this.state.conversations.length) {
+        const selected = conversations.some((value) => value.id === this.state.selectedConversationId) ? this.state.selectedConversationId : "wall";
+        this.patch({ drafts, conversations, selectedConversationId: selected });
       }
     }, 1000);
   }
@@ -439,4 +517,8 @@ export class KnotController {
     this.state = { ...this.state, ...value };
     this.listeners.forEach((listener) => listener());
   }
+}
+
+function escapeHTML(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }

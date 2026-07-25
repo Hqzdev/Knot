@@ -12,11 +12,14 @@ Docker Compose is the canonical Knot Unsecure deployment. It exposes the Web pro
 | Delivery health | `http://host:8085` | Permanent history status |
 | Gateway | `http://host:8086`, `ws://host:8086` | Commands, history and realtime events |
 | Preview | `http://host:8087` | SSRF-guarded link previews |
+| Toxic Support | internal `http://bot:8088` | Deterministic sarcastic responses in the system support chat |
 | MinIO | `http://host:9000` | Public attachment bytes |
 
 There is no TLS configuration, security-header layer, CORS allow-list or WebSocket origin rejection. Adding a private reverse proxy changes the intended demonstration and is outside this repository.
 
-PostgreSQL is the permanent source of truth for identities, conversations, messages and audit events. Redis contains only expiring online state, watcher state, drafts and Roulette matchmaking. NATS carries realtime Wiretap records. MinIO stores source bytes and permits anonymous downloads.
+PostgreSQL is the permanent source of truth for identities, browser-installation descriptors, conversations, messages, receipts, achievements and audit events. Redis contains only expiring online state, watcher state, drafts and Roulette matchmaking. NATS carries realtime Wiretap records and triggers Toxic Support. MinIO stores source bytes and permits anonymous downloads.
+
+The system does not persist or expose IP addresses. Rate-limit keys may use a short-lived HMAC-derived network value in Redis, but request logs are disabled at the public proxy. Browser, OS and form factor are inferred from User-Agent and should be treated as observed browser metadata, not hardware identity.
 
 The required shared values are:
 

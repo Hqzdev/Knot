@@ -81,6 +81,7 @@ const (
 	ConversationKind_CONVERSATION_KIND_GROUP       ConversationKind = 2
 	ConversationKind_CONVERSATION_KIND_WALL        ConversationKind = 3
 	ConversationKind_CONVERSATION_KIND_ROULETTE    ConversationKind = 4
+	ConversationKind_CONVERSATION_KIND_BURNER      ConversationKind = 5
 )
 
 // Enum value maps for ConversationKind.
@@ -91,6 +92,7 @@ var (
 		2: "CONVERSATION_KIND_GROUP",
 		3: "CONVERSATION_KIND_WALL",
 		4: "CONVERSATION_KIND_ROULETTE",
+		5: "CONVERSATION_KIND_BURNER",
 	}
 	ConversationKind_value = map[string]int32{
 		"CONVERSATION_KIND_UNSPECIFIED": 0,
@@ -98,6 +100,7 @@ var (
 		"CONVERSATION_KIND_GROUP":       2,
 		"CONVERSATION_KIND_WALL":        3,
 		"CONVERSATION_KIND_ROULETTE":    4,
+		"CONVERSATION_KIND_BURNER":      5,
 	}
 )
 
@@ -238,6 +241,107 @@ func (MessageEventKind) EnumDescriptor() ([]byte, []int) {
 	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{3}
 }
 
+type DeliveryMode int32
+
+const (
+	DeliveryMode_DELIVERY_MODE_UNSPECIFIED DeliveryMode = 0
+	DeliveryMode_DELIVERY_MODE_NORMAL      DeliveryMode = 1
+	DeliveryMode_DELIVERY_MODE_UNRELIABLE  DeliveryMode = 2
+)
+
+// Enum value maps for DeliveryMode.
+var (
+	DeliveryMode_name = map[int32]string{
+		0: "DELIVERY_MODE_UNSPECIFIED",
+		1: "DELIVERY_MODE_NORMAL",
+		2: "DELIVERY_MODE_UNRELIABLE",
+	}
+	DeliveryMode_value = map[string]int32{
+		"DELIVERY_MODE_UNSPECIFIED": 0,
+		"DELIVERY_MODE_NORMAL":      1,
+		"DELIVERY_MODE_UNRELIABLE":  2,
+	}
+)
+
+func (x DeliveryMode) Enum() *DeliveryMode {
+	p := new(DeliveryMode)
+	*p = x
+	return p
+}
+
+func (x DeliveryMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DeliveryMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_knot_v1_messaging_proto_enumTypes[4].Descriptor()
+}
+
+func (DeliveryMode) Type() protoreflect.EnumType {
+	return &file_knot_v1_messaging_proto_enumTypes[4]
+}
+
+func (x DeliveryMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DeliveryMode.Descriptor instead.
+func (DeliveryMode) EnumDescriptor() ([]byte, []int) {
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{4}
+}
+
+type TextEffect int32
+
+const (
+	TextEffect_TEXT_EFFECT_UNSPECIFIED  TextEffect = 0
+	TextEffect_TEXT_EFFECT_NONE         TextEffect = 1
+	TextEffect_TEXT_EFFECT_BUREAUCRATIC TextEffect = 2
+	TextEffect_TEXT_EFFECT_CAESAR3      TextEffect = 3
+)
+
+// Enum value maps for TextEffect.
+var (
+	TextEffect_name = map[int32]string{
+		0: "TEXT_EFFECT_UNSPECIFIED",
+		1: "TEXT_EFFECT_NONE",
+		2: "TEXT_EFFECT_BUREAUCRATIC",
+		3: "TEXT_EFFECT_CAESAR3",
+	}
+	TextEffect_value = map[string]int32{
+		"TEXT_EFFECT_UNSPECIFIED":  0,
+		"TEXT_EFFECT_NONE":         1,
+		"TEXT_EFFECT_BUREAUCRATIC": 2,
+		"TEXT_EFFECT_CAESAR3":      3,
+	}
+)
+
+func (x TextEffect) Enum() *TextEffect {
+	p := new(TextEffect)
+	*p = x
+	return p
+}
+
+func (x TextEffect) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TextEffect) Descriptor() protoreflect.EnumDescriptor {
+	return file_knot_v1_messaging_proto_enumTypes[5].Descriptor()
+}
+
+func (TextEffect) Type() protoreflect.EnumType {
+	return &file_knot_v1_messaging_proto_enumTypes[5]
+}
+
+func (x TextEffect) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TextEffect.Descriptor instead.
+func (TextEffect) EnumDescriptor() ([]byte, []int) {
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{5}
+}
+
 type AuthorizeConnectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -335,20 +439,25 @@ func (x *AuthorizeConnectionResponse) GetActive() bool {
 }
 
 type RouteCommandRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	ClientCommandId string                 `protobuf:"bytes,1,opt,name=client_command_id,json=clientCommandId,proto3" json:"client_command_id,omitempty"`
-	ConversationId  string                 `protobuf:"bytes,2,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	AuthorUserId    string                 `protobuf:"bytes,3,opt,name=author_user_id,json=authorUserId,proto3" json:"author_user_id,omitempty"`
-	AuthorUsername  string                 `protobuf:"bytes,4,opt,name=author_username,json=authorUsername,proto3" json:"author_username,omitempty"`
-	SessionId       string                 `protobuf:"bytes,5,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	SessionMode     SessionMode            `protobuf:"varint,6,opt,name=session_mode,json=sessionMode,proto3,enum=knot.v1.SessionMode" json:"session_mode,omitempty"`
-	Kind            MessageKind            `protobuf:"varint,7,opt,name=kind,proto3,enum=knot.v1.MessageKind" json:"kind,omitempty"`
-	Text            string                 `protobuf:"bytes,8,opt,name=text,proto3" json:"text,omitempty"`
-	AttachmentId    string                 `protobuf:"bytes,9,opt,name=attachment_id,json=attachmentId,proto3" json:"attachment_id,omitempty"`
-	ReplyToId       string                 `protobuf:"bytes,10,opt,name=reply_to_id,json=replyToId,proto3" json:"reply_to_id,omitempty"`
-	ForwardedFromId string                 `protobuf:"bytes,11,opt,name=forwarded_from_id,json=forwardedFromId,proto3" json:"forwarded_from_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	ClientCommandId        string                 `protobuf:"bytes,1,opt,name=client_command_id,json=clientCommandId,proto3" json:"client_command_id,omitempty"`
+	ConversationId         string                 `protobuf:"bytes,2,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	AuthorUserId           string                 `protobuf:"bytes,3,opt,name=author_user_id,json=authorUserId,proto3" json:"author_user_id,omitempty"`
+	AuthorUsername         string                 `protobuf:"bytes,4,opt,name=author_username,json=authorUsername,proto3" json:"author_username,omitempty"`
+	SessionId              string                 `protobuf:"bytes,5,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionMode            SessionMode            `protobuf:"varint,6,opt,name=session_mode,json=sessionMode,proto3,enum=knot.v1.SessionMode" json:"session_mode,omitempty"`
+	Kind                   MessageKind            `protobuf:"varint,7,opt,name=kind,proto3,enum=knot.v1.MessageKind" json:"kind,omitempty"`
+	Text                   string                 `protobuf:"bytes,8,opt,name=text,proto3" json:"text,omitempty"`
+	AttachmentId           string                 `protobuf:"bytes,9,opt,name=attachment_id,json=attachmentId,proto3" json:"attachment_id,omitempty"`
+	ReplyToId              string                 `protobuf:"bytes,10,opt,name=reply_to_id,json=replyToId,proto3" json:"reply_to_id,omitempty"`
+	ForwardedFromId        string                 `protobuf:"bytes,11,opt,name=forwarded_from_id,json=forwardedFromId,proto3" json:"forwarded_from_id,omitempty"`
+	DeliveryMode           DeliveryMode           `protobuf:"varint,12,opt,name=delivery_mode,json=deliveryMode,proto3,enum=knot.v1.DeliveryMode" json:"delivery_mode,omitempty"`
+	TextEffect             TextEffect             `protobuf:"varint,13,opt,name=text_effect,json=textEffect,proto3,enum=knot.v1.TextEffect" json:"text_effect,omitempty"`
+	AuthorHideAfterSeconds int64                  `protobuf:"varint,14,opt,name=author_hide_after_seconds,json=authorHideAfterSeconds,proto3" json:"author_hide_after_seconds,omitempty"`
+	Device                 *DeviceDescriptor      `protobuf:"bytes,15,opt,name=device,proto3" json:"device,omitempty"`
+	Voice                  *VoiceMetadata         `protobuf:"bytes,16,opt,name=voice,proto3" json:"voice,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *RouteCommandRequest) Reset() {
@@ -456,6 +565,41 @@ func (x *RouteCommandRequest) GetForwardedFromId() string {
 		return x.ForwardedFromId
 	}
 	return ""
+}
+
+func (x *RouteCommandRequest) GetDeliveryMode() DeliveryMode {
+	if x != nil {
+		return x.DeliveryMode
+	}
+	return DeliveryMode_DELIVERY_MODE_UNSPECIFIED
+}
+
+func (x *RouteCommandRequest) GetTextEffect() TextEffect {
+	if x != nil {
+		return x.TextEffect
+	}
+	return TextEffect_TEXT_EFFECT_UNSPECIFIED
+}
+
+func (x *RouteCommandRequest) GetAuthorHideAfterSeconds() int64 {
+	if x != nil {
+		return x.AuthorHideAfterSeconds
+	}
+	return 0
+}
+
+func (x *RouteCommandRequest) GetDevice() *DeviceDescriptor {
+	if x != nil {
+		return x.Device
+	}
+	return nil
+}
+
+func (x *RouteCommandRequest) GetVoice() *VoiceMetadata {
+	if x != nil {
+		return x.Voice
+	}
+	return nil
 }
 
 type RouteCommandResponse struct {
@@ -622,40 +766,346 @@ func (x *Reaction) GetUsernames() []string {
 	return nil
 }
 
+type DeviceDescriptor struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	UserAgent     string                 `protobuf:"bytes,2,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
+	Browser       string                 `protobuf:"bytes,3,opt,name=browser,proto3" json:"browser,omitempty"`
+	Os            string                 `protobuf:"bytes,4,opt,name=os,proto3" json:"os,omitempty"`
+	FormFactor    string                 `protobuf:"bytes,5,opt,name=form_factor,json=formFactor,proto3" json:"form_factor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeviceDescriptor) Reset() {
+	*x = DeviceDescriptor{}
+	mi := &file_knot_v1_messaging_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeviceDescriptor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeviceDescriptor) ProtoMessage() {}
+
+func (x *DeviceDescriptor) ProtoReflect() protoreflect.Message {
+	mi := &file_knot_v1_messaging_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeviceDescriptor.ProtoReflect.Descriptor instead.
+func (*DeviceDescriptor) Descriptor() ([]byte, []int) {
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DeviceDescriptor) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *DeviceDescriptor) GetUserAgent() string {
+	if x != nil {
+		return x.UserAgent
+	}
+	return ""
+}
+
+func (x *DeviceDescriptor) GetBrowser() string {
+	if x != nil {
+		return x.Browser
+	}
+	return ""
+}
+
+func (x *DeviceDescriptor) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *DeviceDescriptor) GetFormFactor() string {
+	if x != nil {
+		return x.FormFactor
+	}
+	return ""
+}
+
+type ReadReceipt struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	UserId           string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Username         string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	SessionId        string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionMode      SessionMode            `protobuf:"varint,4,opt,name=session_mode,json=sessionMode,proto3,enum=knot.v1.SessionMode" json:"session_mode,omitempty"`
+	Device           *DeviceDescriptor      `protobuf:"bytes,5,opt,name=device,proto3" json:"device,omitempty"`
+	ReadAtUnixMillis int64                  `protobuf:"varint,6,opt,name=read_at_unix_millis,json=readAtUnixMillis,proto3" json:"read_at_unix_millis,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ReadReceipt) Reset() {
+	*x = ReadReceipt{}
+	mi := &file_knot_v1_messaging_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadReceipt) ProtoMessage() {}
+
+func (x *ReadReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_knot_v1_messaging_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadReceipt.ProtoReflect.Descriptor instead.
+func (*ReadReceipt) Descriptor() ([]byte, []int) {
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ReadReceipt) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ReadReceipt) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *ReadReceipt) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ReadReceipt) GetSessionMode() SessionMode {
+	if x != nil {
+		return x.SessionMode
+	}
+	return SessionMode_SESSION_MODE_UNSPECIFIED
+}
+
+func (x *ReadReceipt) GetDevice() *DeviceDescriptor {
+	if x != nil {
+		return x.Device
+	}
+	return nil
+}
+
+func (x *ReadReceipt) GetReadAtUnixMillis() int64 {
+	if x != nil {
+		return x.ReadAtUnixMillis
+	}
+	return 0
+}
+
+type ForwardHop struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	MessageId            string                 `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	ConversationId       string                 `protobuf:"bytes,2,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	AuthorUsername       string                 `protobuf:"bytes,3,opt,name=author_username,json=authorUsername,proto3" json:"author_username,omitempty"`
+	OccurredAtUnixMillis int64                  `protobuf:"varint,4,opt,name=occurred_at_unix_millis,json=occurredAtUnixMillis,proto3" json:"occurred_at_unix_millis,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *ForwardHop) Reset() {
+	*x = ForwardHop{}
+	mi := &file_knot_v1_messaging_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForwardHop) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForwardHop) ProtoMessage() {}
+
+func (x *ForwardHop) ProtoReflect() protoreflect.Message {
+	mi := &file_knot_v1_messaging_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForwardHop.ProtoReflect.Descriptor instead.
+func (*ForwardHop) Descriptor() ([]byte, []int) {
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ForwardHop) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *ForwardHop) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *ForwardHop) GetAuthorUsername() string {
+	if x != nil {
+		return x.AuthorUsername
+	}
+	return ""
+}
+
+func (x *ForwardHop) GetOccurredAtUnixMillis() int64 {
+	if x != nil {
+		return x.OccurredAtUnixMillis
+	}
+	return 0
+}
+
+type VoiceMetadata struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	OriginalAttachmentId string                 `protobuf:"bytes,1,opt,name=original_attachment_id,json=originalAttachmentId,proto3" json:"original_attachment_id,omitempty"`
+	TaxedAttachmentId    string                 `protobuf:"bytes,2,opt,name=taxed_attachment_id,json=taxedAttachmentId,proto3" json:"taxed_attachment_id,omitempty"`
+	DurationMillis       int64                  `protobuf:"varint,3,opt,name=duration_millis,json=durationMillis,proto3" json:"duration_millis,omitempty"`
+	TaxLevel             string                 `protobuf:"bytes,4,opt,name=tax_level,json=taxLevel,proto3" json:"tax_level,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *VoiceMetadata) Reset() {
+	*x = VoiceMetadata{}
+	mi := &file_knot_v1_messaging_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceMetadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceMetadata) ProtoMessage() {}
+
+func (x *VoiceMetadata) ProtoReflect() protoreflect.Message {
+	mi := &file_knot_v1_messaging_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceMetadata.ProtoReflect.Descriptor instead.
+func (*VoiceMetadata) Descriptor() ([]byte, []int) {
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *VoiceMetadata) GetOriginalAttachmentId() string {
+	if x != nil {
+		return x.OriginalAttachmentId
+	}
+	return ""
+}
+
+func (x *VoiceMetadata) GetTaxedAttachmentId() string {
+	if x != nil {
+		return x.TaxedAttachmentId
+	}
+	return ""
+}
+
+func (x *VoiceMetadata) GetDurationMillis() int64 {
+	if x != nil {
+		return x.DurationMillis
+	}
+	return 0
+}
+
+func (x *VoiceMetadata) GetTaxLevel() string {
+	if x != nil {
+		return x.TaxLevel
+	}
+	return ""
+}
+
 type Message struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	Sequence               uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
-	Id                     string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	ClientCommandId        string                 `protobuf:"bytes,3,opt,name=client_command_id,json=clientCommandId,proto3" json:"client_command_id,omitempty"`
-	ConversationId         string                 `protobuf:"bytes,4,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	ConversationKind       ConversationKind       `protobuf:"varint,5,opt,name=conversation_kind,json=conversationKind,proto3,enum=knot.v1.ConversationKind" json:"conversation_kind,omitempty"`
-	ParticipantUserIds     []string               `protobuf:"bytes,6,rep,name=participant_user_ids,json=participantUserIds,proto3" json:"participant_user_ids,omitempty"`
-	ParticipantUsernames   []string               `protobuf:"bytes,7,rep,name=participant_usernames,json=participantUsernames,proto3" json:"participant_usernames,omitempty"`
-	AuthorUserId           string                 `protobuf:"bytes,8,opt,name=author_user_id,json=authorUserId,proto3" json:"author_user_id,omitempty"`
-	AuthorUsername         string                 `protobuf:"bytes,9,opt,name=author_username,json=authorUsername,proto3" json:"author_username,omitempty"`
-	SessionId              string                 `protobuf:"bytes,10,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	SessionMode            SessionMode            `protobuf:"varint,11,opt,name=session_mode,json=sessionMode,proto3,enum=knot.v1.SessionMode" json:"session_mode,omitempty"`
-	Kind                   MessageKind            `protobuf:"varint,12,opt,name=kind,proto3,enum=knot.v1.MessageKind" json:"kind,omitempty"`
-	OriginalText           string                 `protobuf:"bytes,13,opt,name=original_text,json=originalText,proto3" json:"original_text,omitempty"`
-	CurrentText            string                 `protobuf:"bytes,14,opt,name=current_text,json=currentText,proto3" json:"current_text,omitempty"`
-	AttachmentId           string                 `protobuf:"bytes,15,opt,name=attachment_id,json=attachmentId,proto3" json:"attachment_id,omitempty"`
-	ReplyToId              string                 `protobuf:"bytes,16,opt,name=reply_to_id,json=replyToId,proto3" json:"reply_to_id,omitempty"`
-	ForwardedFromId        string                 `protobuf:"bytes,17,opt,name=forwarded_from_id,json=forwardedFromId,proto3" json:"forwarded_from_id,omitempty"`
-	CreatedAtUnixMillis    int64                  `protobuf:"varint,18,opt,name=created_at_unix_millis,json=createdAtUnixMillis,proto3" json:"created_at_unix_millis,omitempty"`
-	ServerSeenAtUnixMillis int64                  `protobuf:"varint,19,opt,name=server_seen_at_unix_millis,json=serverSeenAtUnixMillis,proto3" json:"server_seen_at_unix_millis,omitempty"`
-	EditedAtUnixMillis     int64                  `protobuf:"varint,20,opt,name=edited_at_unix_millis,json=editedAtUnixMillis,proto3" json:"edited_at_unix_millis,omitempty"`
-	DeletedAtUnixMillis    int64                  `protobuf:"varint,21,opt,name=deleted_at_unix_millis,json=deletedAtUnixMillis,proto3" json:"deleted_at_unix_millis,omitempty"`
-	DeliveredAtUnixMillis  int64                  `protobuf:"varint,22,opt,name=delivered_at_unix_millis,json=deliveredAtUnixMillis,proto3" json:"delivered_at_unix_millis,omitempty"`
-	ReadAtUnixMillis       int64                  `protobuf:"varint,23,opt,name=read_at_unix_millis,json=readAtUnixMillis,proto3" json:"read_at_unix_millis,omitempty"`
-	Reactions              []*Reaction            `protobuf:"bytes,24,rep,name=reactions,proto3" json:"reactions,omitempty"`
-	Route                  []*RouteHop            `protobuf:"bytes,25,rep,name=route,proto3" json:"route,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Sequence                uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Id                      string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	ClientCommandId         string                 `protobuf:"bytes,3,opt,name=client_command_id,json=clientCommandId,proto3" json:"client_command_id,omitempty"`
+	ConversationId          string                 `protobuf:"bytes,4,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	ConversationKind        ConversationKind       `protobuf:"varint,5,opt,name=conversation_kind,json=conversationKind,proto3,enum=knot.v1.ConversationKind" json:"conversation_kind,omitempty"`
+	ParticipantUserIds      []string               `protobuf:"bytes,6,rep,name=participant_user_ids,json=participantUserIds,proto3" json:"participant_user_ids,omitempty"`
+	ParticipantUsernames    []string               `protobuf:"bytes,7,rep,name=participant_usernames,json=participantUsernames,proto3" json:"participant_usernames,omitempty"`
+	AuthorUserId            string                 `protobuf:"bytes,8,opt,name=author_user_id,json=authorUserId,proto3" json:"author_user_id,omitempty"`
+	AuthorUsername          string                 `protobuf:"bytes,9,opt,name=author_username,json=authorUsername,proto3" json:"author_username,omitempty"`
+	SessionId               string                 `protobuf:"bytes,10,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionMode             SessionMode            `protobuf:"varint,11,opt,name=session_mode,json=sessionMode,proto3,enum=knot.v1.SessionMode" json:"session_mode,omitempty"`
+	Kind                    MessageKind            `protobuf:"varint,12,opt,name=kind,proto3,enum=knot.v1.MessageKind" json:"kind,omitempty"`
+	OriginalText            string                 `protobuf:"bytes,13,opt,name=original_text,json=originalText,proto3" json:"original_text,omitempty"`
+	CurrentText             string                 `protobuf:"bytes,14,opt,name=current_text,json=currentText,proto3" json:"current_text,omitempty"`
+	AttachmentId            string                 `protobuf:"bytes,15,opt,name=attachment_id,json=attachmentId,proto3" json:"attachment_id,omitempty"`
+	ReplyToId               string                 `protobuf:"bytes,16,opt,name=reply_to_id,json=replyToId,proto3" json:"reply_to_id,omitempty"`
+	ForwardedFromId         string                 `protobuf:"bytes,17,opt,name=forwarded_from_id,json=forwardedFromId,proto3" json:"forwarded_from_id,omitempty"`
+	CreatedAtUnixMillis     int64                  `protobuf:"varint,18,opt,name=created_at_unix_millis,json=createdAtUnixMillis,proto3" json:"created_at_unix_millis,omitempty"`
+	ServerSeenAtUnixMillis  int64                  `protobuf:"varint,19,opt,name=server_seen_at_unix_millis,json=serverSeenAtUnixMillis,proto3" json:"server_seen_at_unix_millis,omitempty"`
+	EditedAtUnixMillis      int64                  `protobuf:"varint,20,opt,name=edited_at_unix_millis,json=editedAtUnixMillis,proto3" json:"edited_at_unix_millis,omitempty"`
+	DeletedAtUnixMillis     int64                  `protobuf:"varint,21,opt,name=deleted_at_unix_millis,json=deletedAtUnixMillis,proto3" json:"deleted_at_unix_millis,omitempty"`
+	DeliveredAtUnixMillis   int64                  `protobuf:"varint,22,opt,name=delivered_at_unix_millis,json=deliveredAtUnixMillis,proto3" json:"delivered_at_unix_millis,omitempty"`
+	ReadAtUnixMillis        int64                  `protobuf:"varint,23,opt,name=read_at_unix_millis,json=readAtUnixMillis,proto3" json:"read_at_unix_millis,omitempty"`
+	Reactions               []*Reaction            `protobuf:"bytes,24,rep,name=reactions,proto3" json:"reactions,omitempty"`
+	Route                   []*RouteHop            `protobuf:"bytes,25,rep,name=route,proto3" json:"route,omitempty"`
+	ReadReceipts            []*ReadReceipt         `protobuf:"bytes,26,rep,name=read_receipts,json=readReceipts,proto3" json:"read_receipts,omitempty"`
+	ForwardChain            []*ForwardHop          `protobuf:"bytes,27,rep,name=forward_chain,json=forwardChain,proto3" json:"forward_chain,omitempty"`
+	RequestedConversationId string                 `protobuf:"bytes,28,opt,name=requested_conversation_id,json=requestedConversationId,proto3" json:"requested_conversation_id,omitempty"`
+	DeliveryMode            DeliveryMode           `protobuf:"varint,29,opt,name=delivery_mode,json=deliveryMode,proto3,enum=knot.v1.DeliveryMode" json:"delivery_mode,omitempty"`
+	TextEffect              TextEffect             `protobuf:"varint,30,opt,name=text_effect,json=textEffect,proto3,enum=knot.v1.TextEffect" json:"text_effect,omitempty"`
+	CurrentSourceText       string                 `protobuf:"bytes,31,opt,name=current_source_text,json=currentSourceText,proto3" json:"current_source_text,omitempty"`
+	AuthorHideAtUnixMillis  int64                  `protobuf:"varint,32,opt,name=author_hide_at_unix_millis,json=authorHideAtUnixMillis,proto3" json:"author_hide_at_unix_millis,omitempty"`
+	AuthorProjectionHidden  bool                   `protobuf:"varint,33,opt,name=author_projection_hidden,json=authorProjectionHidden,proto3" json:"author_projection_hidden,omitempty"`
+	Voice                   *VoiceMetadata         `protobuf:"bytes,34,opt,name=voice,proto3" json:"voice,omitempty"`
+	AuthorDevice            *DeviceDescriptor      `protobuf:"bytes,35,opt,name=author_device,json=authorDevice,proto3" json:"author_device,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[6]
+	mi := &file_knot_v1_messaging_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -667,7 +1117,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[6]
+	mi := &file_knot_v1_messaging_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -680,7 +1130,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{6}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Message) GetSequence() uint64 {
@@ -858,6 +1308,76 @@ func (x *Message) GetRoute() []*RouteHop {
 	return nil
 }
 
+func (x *Message) GetReadReceipts() []*ReadReceipt {
+	if x != nil {
+		return x.ReadReceipts
+	}
+	return nil
+}
+
+func (x *Message) GetForwardChain() []*ForwardHop {
+	if x != nil {
+		return x.ForwardChain
+	}
+	return nil
+}
+
+func (x *Message) GetRequestedConversationId() string {
+	if x != nil {
+		return x.RequestedConversationId
+	}
+	return ""
+}
+
+func (x *Message) GetDeliveryMode() DeliveryMode {
+	if x != nil {
+		return x.DeliveryMode
+	}
+	return DeliveryMode_DELIVERY_MODE_UNSPECIFIED
+}
+
+func (x *Message) GetTextEffect() TextEffect {
+	if x != nil {
+		return x.TextEffect
+	}
+	return TextEffect_TEXT_EFFECT_UNSPECIFIED
+}
+
+func (x *Message) GetCurrentSourceText() string {
+	if x != nil {
+		return x.CurrentSourceText
+	}
+	return ""
+}
+
+func (x *Message) GetAuthorHideAtUnixMillis() int64 {
+	if x != nil {
+		return x.AuthorHideAtUnixMillis
+	}
+	return 0
+}
+
+func (x *Message) GetAuthorProjectionHidden() bool {
+	if x != nil {
+		return x.AuthorProjectionHidden
+	}
+	return false
+}
+
+func (x *Message) GetVoice() *VoiceMetadata {
+	if x != nil {
+		return x.Voice
+	}
+	return nil
+}
+
+func (x *Message) GetAuthorDevice() *DeviceDescriptor {
+	if x != nil {
+		return x.AuthorDevice
+	}
+	return nil
+}
+
 type AppendRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
@@ -867,7 +1387,7 @@ type AppendRequest struct {
 
 func (x *AppendRequest) Reset() {
 	*x = AppendRequest{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[7]
+	mi := &file_knot_v1_messaging_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -879,7 +1399,7 @@ func (x *AppendRequest) String() string {
 func (*AppendRequest) ProtoMessage() {}
 
 func (x *AppendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[7]
+	mi := &file_knot_v1_messaging_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -892,7 +1412,7 @@ func (x *AppendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendRequest.ProtoReflect.Descriptor instead.
 func (*AppendRequest) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{7}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AppendRequest) GetMessage() *Message {
@@ -912,7 +1432,7 @@ type AppendResponse struct {
 
 func (x *AppendResponse) Reset() {
 	*x = AppendResponse{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[8]
+	mi := &file_knot_v1_messaging_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -924,7 +1444,7 @@ func (x *AppendResponse) String() string {
 func (*AppendResponse) ProtoMessage() {}
 
 func (x *AppendResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[8]
+	mi := &file_knot_v1_messaging_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -937,7 +1457,7 @@ func (x *AppendResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendResponse.ProtoReflect.Descriptor instead.
 func (*AppendResponse) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{8}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AppendResponse) GetMessage() *Message {
@@ -967,13 +1487,14 @@ type ApplyEventRequest struct {
 	Emoji                string                 `protobuf:"bytes,9,opt,name=emoji,proto3" json:"emoji,omitempty"`
 	Active               bool                   `protobuf:"varint,10,opt,name=active,proto3" json:"active,omitempty"`
 	OccurredAtUnixMillis int64                  `protobuf:"varint,11,opt,name=occurred_at_unix_millis,json=occurredAtUnixMillis,proto3" json:"occurred_at_unix_millis,omitempty"`
+	Device               *DeviceDescriptor      `protobuf:"bytes,12,opt,name=device,proto3" json:"device,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ApplyEventRequest) Reset() {
 	*x = ApplyEventRequest{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[9]
+	mi := &file_knot_v1_messaging_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -985,7 +1506,7 @@ func (x *ApplyEventRequest) String() string {
 func (*ApplyEventRequest) ProtoMessage() {}
 
 func (x *ApplyEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[9]
+	mi := &file_knot_v1_messaging_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -998,7 +1519,7 @@ func (x *ApplyEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyEventRequest.ProtoReflect.Descriptor instead.
 func (*ApplyEventRequest) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{9}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ApplyEventRequest) GetClientCommandId() string {
@@ -1078,6 +1599,13 @@ func (x *ApplyEventRequest) GetOccurredAtUnixMillis() int64 {
 	return 0
 }
 
+func (x *ApplyEventRequest) GetDevice() *DeviceDescriptor {
+	if x != nil {
+		return x.Device
+	}
+	return nil
+}
+
 type ApplyEventResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
@@ -1088,7 +1616,7 @@ type ApplyEventResponse struct {
 
 func (x *ApplyEventResponse) Reset() {
 	*x = ApplyEventResponse{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[10]
+	mi := &file_knot_v1_messaging_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1100,7 +1628,7 @@ func (x *ApplyEventResponse) String() string {
 func (*ApplyEventResponse) ProtoMessage() {}
 
 func (x *ApplyEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[10]
+	mi := &file_knot_v1_messaging_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1113,7 +1641,7 @@ func (x *ApplyEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyEventResponse.ProtoReflect.Descriptor instead.
 func (*ApplyEventResponse) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{10}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ApplyEventResponse) GetMessage() *Message {
@@ -1142,7 +1670,7 @@ type HistoryRequest struct {
 
 func (x *HistoryRequest) Reset() {
 	*x = HistoryRequest{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[11]
+	mi := &file_knot_v1_messaging_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1154,7 +1682,7 @@ func (x *HistoryRequest) String() string {
 func (*HistoryRequest) ProtoMessage() {}
 
 func (x *HistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[11]
+	mi := &file_knot_v1_messaging_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1167,7 +1695,7 @@ func (x *HistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryRequest.ProtoReflect.Descriptor instead.
 func (*HistoryRequest) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{11}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *HistoryRequest) GetUserId() string {
@@ -1208,7 +1736,7 @@ type HistoryResponse struct {
 
 func (x *HistoryResponse) Reset() {
 	*x = HistoryResponse{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[12]
+	mi := &file_knot_v1_messaging_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1220,7 +1748,7 @@ func (x *HistoryResponse) String() string {
 func (*HistoryResponse) ProtoMessage() {}
 
 func (x *HistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[12]
+	mi := &file_knot_v1_messaging_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,7 +1761,7 @@ func (x *HistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryResponse.ProtoReflect.Descriptor instead.
 func (*HistoryResponse) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{12}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *HistoryResponse) GetMessages() []*Message {
@@ -1265,7 +1793,7 @@ type WiretapRequest struct {
 
 func (x *WiretapRequest) Reset() {
 	*x = WiretapRequest{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[13]
+	mi := &file_knot_v1_messaging_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1277,7 +1805,7 @@ func (x *WiretapRequest) String() string {
 func (*WiretapRequest) ProtoMessage() {}
 
 func (x *WiretapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[13]
+	mi := &file_knot_v1_messaging_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1290,7 +1818,7 @@ func (x *WiretapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WiretapRequest.ProtoReflect.Descriptor instead.
 func (*WiretapRequest) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{13}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *WiretapRequest) GetAfterSequence() uint64 {
@@ -1356,13 +1884,14 @@ type WiretapRecord struct {
 	Emoji                string                 `protobuf:"bytes,10,opt,name=emoji,proto3" json:"emoji,omitempty"`
 	Active               bool                   `protobuf:"varint,11,opt,name=active,proto3" json:"active,omitempty"`
 	OccurredAtUnixMillis int64                  `protobuf:"varint,12,opt,name=occurred_at_unix_millis,json=occurredAtUnixMillis,proto3" json:"occurred_at_unix_millis,omitempty"`
+	Device               *DeviceDescriptor      `protobuf:"bytes,13,opt,name=device,proto3" json:"device,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
 
 func (x *WiretapRecord) Reset() {
 	*x = WiretapRecord{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[14]
+	mi := &file_knot_v1_messaging_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1374,7 +1903,7 @@ func (x *WiretapRecord) String() string {
 func (*WiretapRecord) ProtoMessage() {}
 
 func (x *WiretapRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[14]
+	mi := &file_knot_v1_messaging_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1387,7 +1916,7 @@ func (x *WiretapRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WiretapRecord.ProtoReflect.Descriptor instead.
 func (*WiretapRecord) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{14}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *WiretapRecord) GetSequence() uint64 {
@@ -1474,6 +2003,13 @@ func (x *WiretapRecord) GetOccurredAtUnixMillis() int64 {
 	return 0
 }
 
+func (x *WiretapRecord) GetDevice() *DeviceDescriptor {
+	if x != nil {
+		return x.Device
+	}
+	return nil
+}
+
 type WiretapResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Records       []*WiretapRecord       `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
@@ -1484,7 +2020,7 @@ type WiretapResponse struct {
 
 func (x *WiretapResponse) Reset() {
 	*x = WiretapResponse{}
-	mi := &file_knot_v1_messaging_proto_msgTypes[15]
+	mi := &file_knot_v1_messaging_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1496,7 +2032,7 @@ func (x *WiretapResponse) String() string {
 func (*WiretapResponse) ProtoMessage() {}
 
 func (x *WiretapResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_knot_v1_messaging_proto_msgTypes[15]
+	mi := &file_knot_v1_messaging_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1509,7 +2045,7 @@ func (x *WiretapResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WiretapResponse.ProtoReflect.Descriptor instead.
 func (*WiretapResponse) Descriptor() ([]byte, []int) {
-	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{15}
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *WiretapResponse) GetRecords() []*WiretapRecord {
@@ -1526,6 +2062,218 @@ func (x *WiretapResponse) GetNextSequence() uint64 {
 	return 0
 }
 
+type Achievement struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Id                   string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Username             string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	Kind                 string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	Title                string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
+	EvidenceMessageId    string                 `protobuf:"bytes,5,opt,name=evidence_message_id,json=evidenceMessageId,proto3" json:"evidence_message_id,omitempty"`
+	UnlockedAtUnixMillis int64                  `protobuf:"varint,6,opt,name=unlocked_at_unix_millis,json=unlockedAtUnixMillis,proto3" json:"unlocked_at_unix_millis,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *Achievement) Reset() {
+	*x = Achievement{}
+	mi := &file_knot_v1_messaging_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Achievement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Achievement) ProtoMessage() {}
+
+func (x *Achievement) ProtoReflect() protoreflect.Message {
+	mi := &file_knot_v1_messaging_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Achievement.ProtoReflect.Descriptor instead.
+func (*Achievement) Descriptor() ([]byte, []int) {
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *Achievement) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Achievement) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *Achievement) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Achievement) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Achievement) GetEvidenceMessageId() string {
+	if x != nil {
+		return x.EvidenceMessageId
+	}
+	return ""
+}
+
+func (x *Achievement) GetUnlockedAtUnixMillis() int64 {
+	if x != nil {
+		return x.UnlockedAtUnixMillis
+	}
+	return 0
+}
+
+type DossierRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Limit         uint32                 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DossierRequest) Reset() {
+	*x = DossierRequest{}
+	mi := &file_knot_v1_messaging_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DossierRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DossierRequest) ProtoMessage() {}
+
+func (x *DossierRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_knot_v1_messaging_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DossierRequest.ProtoReflect.Descriptor instead.
+func (*DossierRequest) Descriptor() ([]byte, []int) {
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DossierRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *DossierRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type DossierResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Records       []*WiretapRecord       `protobuf:"bytes,2,rep,name=records,proto3" json:"records,omitempty"`
+	Messages      []*Message             `protobuf:"bytes,3,rep,name=messages,proto3" json:"messages,omitempty"`
+	Achievements  []*Achievement         `protobuf:"bytes,4,rep,name=achievements,proto3" json:"achievements,omitempty"`
+	Truncated     bool                   `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DossierResponse) Reset() {
+	*x = DossierResponse{}
+	mi := &file_knot_v1_messaging_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DossierResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DossierResponse) ProtoMessage() {}
+
+func (x *DossierResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_knot_v1_messaging_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DossierResponse.ProtoReflect.Descriptor instead.
+func (*DossierResponse) Descriptor() ([]byte, []int) {
+	return file_knot_v1_messaging_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DossierResponse) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *DossierResponse) GetRecords() []*WiretapRecord {
+	if x != nil {
+		return x.Records
+	}
+	return nil
+}
+
+func (x *DossierResponse) GetMessages() []*Message {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *DossierResponse) GetAchievements() []*Achievement {
+	if x != nil {
+		return x.Achievements
+	}
+	return nil
+}
+
+func (x *DossierResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
 var File_knot_v1_messaging_proto protoreflect.FileDescriptor
 
 const file_knot_v1_messaging_proto_rawDesc = "" +
@@ -1536,7 +2284,7 @@ const file_knot_v1_messaging_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\"5\n" +
 	"\x1bAuthorizeConnectionResponse\x12\x16\n" +
-	"\x06active\x18\x01 \x01(\bR\x06active\"\xc0\x03\n" +
+	"\x06active\x18\x01 \x01(\bR\x06active\"\xce\x05\n" +
 	"\x13RouteCommandRequest\x12*\n" +
 	"\x11client_command_id\x18\x01 \x01(\tR\x0fclientCommandId\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12$\n" +
@@ -1550,7 +2298,13 @@ const file_knot_v1_messaging_proto_rawDesc = "" +
 	"\rattachment_id\x18\t \x01(\tR\fattachmentId\x12\x1e\n" +
 	"\vreply_to_id\x18\n" +
 	" \x01(\tR\treplyToId\x12*\n" +
-	"\x11forwarded_from_id\x18\v \x01(\tR\x0fforwardedFromId\"`\n" +
+	"\x11forwarded_from_id\x18\v \x01(\tR\x0fforwardedFromId\x12:\n" +
+	"\rdelivery_mode\x18\f \x01(\x0e2\x15.knot.v1.DeliveryModeR\fdeliveryMode\x124\n" +
+	"\vtext_effect\x18\r \x01(\x0e2\x13.knot.v1.TextEffectR\n" +
+	"textEffect\x129\n" +
+	"\x19author_hide_after_seconds\x18\x0e \x01(\x03R\x16authorHideAfterSeconds\x121\n" +
+	"\x06device\x18\x0f \x01(\v2\x19.knot.v1.DeviceDescriptorR\x06device\x12,\n" +
+	"\x05voice\x18\x10 \x01(\v2\x16.knot.v1.VoiceMetadataR\x05voice\"`\n" +
 	"\x14RouteCommandResponse\x12*\n" +
 	"\amessage\x18\x01 \x01(\v2\x10.knot.v1.MessageR\amessage\x12\x1c\n" +
 	"\tduplicate\x18\x02 \x01(\bR\tduplicate\"s\n" +
@@ -1560,7 +2314,35 @@ const file_knot_v1_messaging_proto_rawDesc = "" +
 	"\x17occurred_at_unix_millis\x18\x03 \x01(\x03R\x14occurredAtUnixMillis\">\n" +
 	"\bReaction\x12\x14\n" +
 	"\x05emoji\x18\x01 \x01(\tR\x05emoji\x12\x1c\n" +
-	"\tusernames\x18\x02 \x03(\tR\tusernames\"\xde\b\n" +
+	"\tusernames\x18\x02 \x03(\tR\tusernames\"\x99\x01\n" +
+	"\x10DeviceDescriptor\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x1d\n" +
+	"\n" +
+	"user_agent\x18\x02 \x01(\tR\tuserAgent\x12\x18\n" +
+	"\abrowser\x18\x03 \x01(\tR\abrowser\x12\x0e\n" +
+	"\x02os\x18\x04 \x01(\tR\x02os\x12\x1f\n" +
+	"\vform_factor\x18\x05 \x01(\tR\n" +
+	"formFactor\"\xfc\x01\n" +
+	"\vReadReceipt\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\x127\n" +
+	"\fsession_mode\x18\x04 \x01(\x0e2\x14.knot.v1.SessionModeR\vsessionMode\x121\n" +
+	"\x06device\x18\x05 \x01(\v2\x19.knot.v1.DeviceDescriptorR\x06device\x12-\n" +
+	"\x13read_at_unix_millis\x18\x06 \x01(\x03R\x10readAtUnixMillis\"\xb4\x01\n" +
+	"\n" +
+	"ForwardHop\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\x12'\n" +
+	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12'\n" +
+	"\x0fauthor_username\x18\x03 \x01(\tR\x0eauthorUsername\x125\n" +
+	"\x17occurred_at_unix_millis\x18\x04 \x01(\x03R\x14occurredAtUnixMillis\"\xbb\x01\n" +
+	"\rVoiceMetadata\x124\n" +
+	"\x16original_attachment_id\x18\x01 \x01(\tR\x14originalAttachmentId\x12.\n" +
+	"\x13taxed_attachment_id\x18\x02 \x01(\tR\x11taxedAttachmentId\x12'\n" +
+	"\x0fduration_millis\x18\x03 \x01(\x03R\x0edurationMillis\x12\x1b\n" +
+	"\ttax_level\x18\x04 \x01(\tR\btaxLevel\"\x95\r\n" +
 	"\aMessage\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12*\n" +
@@ -1588,12 +2370,23 @@ const file_knot_v1_messaging_proto_rawDesc = "" +
 	"\x18delivered_at_unix_millis\x18\x16 \x01(\x03R\x15deliveredAtUnixMillis\x12-\n" +
 	"\x13read_at_unix_millis\x18\x17 \x01(\x03R\x10readAtUnixMillis\x12/\n" +
 	"\treactions\x18\x18 \x03(\v2\x11.knot.v1.ReactionR\treactions\x12'\n" +
-	"\x05route\x18\x19 \x03(\v2\x11.knot.v1.RouteHopR\x05route\";\n" +
+	"\x05route\x18\x19 \x03(\v2\x11.knot.v1.RouteHopR\x05route\x129\n" +
+	"\rread_receipts\x18\x1a \x03(\v2\x14.knot.v1.ReadReceiptR\freadReceipts\x128\n" +
+	"\rforward_chain\x18\x1b \x03(\v2\x13.knot.v1.ForwardHopR\fforwardChain\x12:\n" +
+	"\x19requested_conversation_id\x18\x1c \x01(\tR\x17requestedConversationId\x12:\n" +
+	"\rdelivery_mode\x18\x1d \x01(\x0e2\x15.knot.v1.DeliveryModeR\fdeliveryMode\x124\n" +
+	"\vtext_effect\x18\x1e \x01(\x0e2\x13.knot.v1.TextEffectR\n" +
+	"textEffect\x12.\n" +
+	"\x13current_source_text\x18\x1f \x01(\tR\x11currentSourceText\x12:\n" +
+	"\x1aauthor_hide_at_unix_millis\x18  \x01(\x03R\x16authorHideAtUnixMillis\x128\n" +
+	"\x18author_projection_hidden\x18! \x01(\bR\x16authorProjectionHidden\x12,\n" +
+	"\x05voice\x18\" \x01(\v2\x16.knot.v1.VoiceMetadataR\x05voice\x12>\n" +
+	"\rauthor_device\x18# \x01(\v2\x19.knot.v1.DeviceDescriptorR\fauthorDevice\";\n" +
 	"\rAppendRequest\x12*\n" +
 	"\amessage\x18\x01 \x01(\v2\x10.knot.v1.MessageR\amessage\"Z\n" +
 	"\x0eAppendResponse\x12*\n" +
 	"\amessage\x18\x01 \x01(\v2\x10.knot.v1.MessageR\amessage\x12\x1c\n" +
-	"\tduplicate\x18\x02 \x01(\bR\tduplicate\"\xa9\x03\n" +
+	"\tduplicate\x18\x02 \x01(\bR\tduplicate\"\xdc\x03\n" +
 	"\x11ApplyEventRequest\x12*\n" +
 	"\x11client_command_id\x18\x01 \x01(\tR\x0fclientCommandId\x12\x1d\n" +
 	"\n" +
@@ -1608,7 +2401,8 @@ const file_knot_v1_messaging_proto_rawDesc = "" +
 	"\x05emoji\x18\t \x01(\tR\x05emoji\x12\x16\n" +
 	"\x06active\x18\n" +
 	" \x01(\bR\x06active\x125\n" +
-	"\x17occurred_at_unix_millis\x18\v \x01(\x03R\x14occurredAtUnixMillis\"^\n" +
+	"\x17occurred_at_unix_millis\x18\v \x01(\x03R\x14occurredAtUnixMillis\x121\n" +
+	"\x06device\x18\f \x01(\v2\x19.knot.v1.DeviceDescriptorR\x06device\"^\n" +
 	"\x12ApplyEventResponse\x12*\n" +
 	"\amessage\x18\x01 \x01(\v2\x10.knot.v1.MessageR\amessage\x12\x1c\n" +
 	"\tduplicate\x18\x02 \x01(\bR\tduplicate\"\x8f\x01\n" +
@@ -1628,7 +2422,7 @@ const file_knot_v1_messaging_proto_rawDesc = "" +
 	"\x0fconversation_id\x18\x05 \x01(\tR\x0econversationId\x127\n" +
 	"\fsession_mode\x18\x06 \x01(\x0e2\x14.knot.v1.SessionModeR\vsessionMode\x128\n" +
 	"\n" +
-	"event_kind\x18\a \x01(\x0e2\x19.knot.v1.MessageEventKindR\teventKind\"\xc8\x03\n" +
+	"event_kind\x18\a \x01(\x0e2\x19.knot.v1.MessageEventKindR\teventKind\"\xfb\x03\n" +
 	"\rWiretapRecord\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x128\n" +
@@ -1644,21 +2438,39 @@ const file_knot_v1_messaging_proto_rawDesc = "" +
 	"\x05emoji\x18\n" +
 	" \x01(\tR\x05emoji\x12\x16\n" +
 	"\x06active\x18\v \x01(\bR\x06active\x125\n" +
-	"\x17occurred_at_unix_millis\x18\f \x01(\x03R\x14occurredAtUnixMillis\"h\n" +
+	"\x17occurred_at_unix_millis\x18\f \x01(\x03R\x14occurredAtUnixMillis\x121\n" +
+	"\x06device\x18\r \x01(\v2\x19.knot.v1.DeviceDescriptorR\x06device\"h\n" +
 	"\x0fWiretapResponse\x120\n" +
 	"\arecords\x18\x01 \x03(\v2\x16.knot.v1.WiretapRecordR\arecords\x12#\n" +
-	"\rnext_sequence\x18\x02 \x01(\x04R\fnextSequence*}\n" +
+	"\rnext_sequence\x18\x02 \x01(\x04R\fnextSequence\"\xca\x01\n" +
+	"\vAchievement\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\x12\x12\n" +
+	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05title\x18\x04 \x01(\tR\x05title\x12.\n" +
+	"\x13evidence_message_id\x18\x05 \x01(\tR\x11evidenceMessageId\x125\n" +
+	"\x17unlocked_at_unix_millis\x18\x06 \x01(\x03R\x14unlockedAtUnixMillis\"B\n" +
+	"\x0eDossierRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\rR\x05limit\"\xe5\x01\n" +
+	"\x0fDossierResponse\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x120\n" +
+	"\arecords\x18\x02 \x03(\v2\x16.knot.v1.WiretapRecordR\arecords\x12,\n" +
+	"\bmessages\x18\x03 \x03(\v2\x10.knot.v1.MessageR\bmessages\x128\n" +
+	"\fachievements\x18\x04 \x03(\v2\x14.knot.v1.AchievementR\fachievements\x12\x1c\n" +
+	"\ttruncated\x18\x05 \x01(\bR\ttruncated*}\n" +
 	"\vSessionMode\x12\x1c\n" +
 	"\x18SESSION_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15SESSION_MODE_PASSWORD\x10\x01\x12\x16\n" +
 	"\x12SESSION_MODE_GUEST\x10\x02\x12\x1d\n" +
-	"\x19SESSION_MODE_IMPERSONATED\x10\x03*\xac\x01\n" +
+	"\x19SESSION_MODE_IMPERSONATED\x10\x03*\xca\x01\n" +
 	"\x10ConversationKind\x12!\n" +
 	"\x1dCONVERSATION_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CONVERSATION_KIND_DIRECT\x10\x01\x12\x1b\n" +
 	"\x17CONVERSATION_KIND_GROUP\x10\x02\x12\x1a\n" +
 	"\x16CONVERSATION_KIND_WALL\x10\x03\x12\x1e\n" +
-	"\x1aCONVERSATION_KIND_ROULETTE\x10\x04*x\n" +
+	"\x1aCONVERSATION_KIND_ROULETTE\x10\x04\x12\x1c\n" +
+	"\x18CONVERSATION_KIND_BURNER\x10\x05*x\n" +
 	"\vMessageKind\x12\x1c\n" +
 	"\x18MESSAGE_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11MESSAGE_KIND_TEXT\x10\x01\x12\x1b\n" +
@@ -1670,16 +2482,27 @@ const file_knot_v1_messaging_proto_rawDesc = "" +
 	"\x17MESSAGE_EVENT_KIND_EDIT\x10\x02\x12\x1d\n" +
 	"\x19MESSAGE_EVENT_KIND_DELETE\x10\x03\x12\x1f\n" +
 	"\x1bMESSAGE_EVENT_KIND_REACTION\x10\x04\x12\x1e\n" +
-	"\x1aMESSAGE_EVENT_KIND_RECEIPT\x10\x052\xbe\x01\n" +
+	"\x1aMESSAGE_EVENT_KIND_RECEIPT\x10\x05*e\n" +
+	"\fDeliveryMode\x12\x1d\n" +
+	"\x19DELIVERY_MODE_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14DELIVERY_MODE_NORMAL\x10\x01\x12\x1c\n" +
+	"\x18DELIVERY_MODE_UNRELIABLE\x10\x02*v\n" +
+	"\n" +
+	"TextEffect\x12\x1b\n" +
+	"\x17TEXT_EFFECT_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10TEXT_EFFECT_NONE\x10\x01\x12\x1c\n" +
+	"\x18TEXT_EFFECT_BUREAUCRATIC\x10\x02\x12\x17\n" +
+	"\x13TEXT_EFFECT_CAESAR3\x10\x032\xbe\x01\n" +
 	"\rRouterService\x12`\n" +
 	"\x13AuthorizeConnection\x12#.knot.v1.AuthorizeConnectionRequest\x1a$.knot.v1.AuthorizeConnectionResponse\x12K\n" +
-	"\fRouteCommand\x12\x1c.knot.v1.RouteCommandRequest\x1a\x1d.knot.v1.RouteCommandResponse2\x8f\x02\n" +
+	"\fRouteCommand\x12\x1c.knot.v1.RouteCommandRequest\x1a\x1d.knot.v1.RouteCommandResponse2\xcd\x02\n" +
 	"\x0fDeliveryService\x129\n" +
 	"\x06Append\x12\x16.knot.v1.AppendRequest\x1a\x17.knot.v1.AppendResponse\x12E\n" +
 	"\n" +
 	"ApplyEvent\x12\x1a.knot.v1.ApplyEventRequest\x1a\x1b.knot.v1.ApplyEventResponse\x12<\n" +
 	"\aHistory\x12\x17.knot.v1.HistoryRequest\x1a\x18.knot.v1.HistoryResponse\x12<\n" +
-	"\aWiretap\x12\x17.knot.v1.WiretapRequest\x1a\x18.knot.v1.WiretapResponseB@Z>github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1;knotv1b\x06proto3"
+	"\aWiretap\x12\x17.knot.v1.WiretapRequest\x1a\x18.knot.v1.WiretapResponse\x12<\n" +
+	"\aDossier\x12\x17.knot.v1.DossierRequest\x1a\x18.knot.v1.DossierResponseB@Z>github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1;knotv1b\x06proto3"
 
 var (
 	file_knot_v1_messaging_proto_rawDescOnce sync.Once
@@ -1693,68 +2516,96 @@ func file_knot_v1_messaging_proto_rawDescGZIP() []byte {
 	return file_knot_v1_messaging_proto_rawDescData
 }
 
-var file_knot_v1_messaging_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_knot_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_knot_v1_messaging_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_knot_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_knot_v1_messaging_proto_goTypes = []any{
 	(SessionMode)(0),                    // 0: knot.v1.SessionMode
 	(ConversationKind)(0),               // 1: knot.v1.ConversationKind
 	(MessageKind)(0),                    // 2: knot.v1.MessageKind
 	(MessageEventKind)(0),               // 3: knot.v1.MessageEventKind
-	(*AuthorizeConnectionRequest)(nil),  // 4: knot.v1.AuthorizeConnectionRequest
-	(*AuthorizeConnectionResponse)(nil), // 5: knot.v1.AuthorizeConnectionResponse
-	(*RouteCommandRequest)(nil),         // 6: knot.v1.RouteCommandRequest
-	(*RouteCommandResponse)(nil),        // 7: knot.v1.RouteCommandResponse
-	(*RouteHop)(nil),                    // 8: knot.v1.RouteHop
-	(*Reaction)(nil),                    // 9: knot.v1.Reaction
-	(*Message)(nil),                     // 10: knot.v1.Message
-	(*AppendRequest)(nil),               // 11: knot.v1.AppendRequest
-	(*AppendResponse)(nil),              // 12: knot.v1.AppendResponse
-	(*ApplyEventRequest)(nil),           // 13: knot.v1.ApplyEventRequest
-	(*ApplyEventResponse)(nil),          // 14: knot.v1.ApplyEventResponse
-	(*HistoryRequest)(nil),              // 15: knot.v1.HistoryRequest
-	(*HistoryResponse)(nil),             // 16: knot.v1.HistoryResponse
-	(*WiretapRequest)(nil),              // 17: knot.v1.WiretapRequest
-	(*WiretapRecord)(nil),               // 18: knot.v1.WiretapRecord
-	(*WiretapResponse)(nil),             // 19: knot.v1.WiretapResponse
+	(DeliveryMode)(0),                   // 4: knot.v1.DeliveryMode
+	(TextEffect)(0),                     // 5: knot.v1.TextEffect
+	(*AuthorizeConnectionRequest)(nil),  // 6: knot.v1.AuthorizeConnectionRequest
+	(*AuthorizeConnectionResponse)(nil), // 7: knot.v1.AuthorizeConnectionResponse
+	(*RouteCommandRequest)(nil),         // 8: knot.v1.RouteCommandRequest
+	(*RouteCommandResponse)(nil),        // 9: knot.v1.RouteCommandResponse
+	(*RouteHop)(nil),                    // 10: knot.v1.RouteHop
+	(*Reaction)(nil),                    // 11: knot.v1.Reaction
+	(*DeviceDescriptor)(nil),            // 12: knot.v1.DeviceDescriptor
+	(*ReadReceipt)(nil),                 // 13: knot.v1.ReadReceipt
+	(*ForwardHop)(nil),                  // 14: knot.v1.ForwardHop
+	(*VoiceMetadata)(nil),               // 15: knot.v1.VoiceMetadata
+	(*Message)(nil),                     // 16: knot.v1.Message
+	(*AppendRequest)(nil),               // 17: knot.v1.AppendRequest
+	(*AppendResponse)(nil),              // 18: knot.v1.AppendResponse
+	(*ApplyEventRequest)(nil),           // 19: knot.v1.ApplyEventRequest
+	(*ApplyEventResponse)(nil),          // 20: knot.v1.ApplyEventResponse
+	(*HistoryRequest)(nil),              // 21: knot.v1.HistoryRequest
+	(*HistoryResponse)(nil),             // 22: knot.v1.HistoryResponse
+	(*WiretapRequest)(nil),              // 23: knot.v1.WiretapRequest
+	(*WiretapRecord)(nil),               // 24: knot.v1.WiretapRecord
+	(*WiretapResponse)(nil),             // 25: knot.v1.WiretapResponse
+	(*Achievement)(nil),                 // 26: knot.v1.Achievement
+	(*DossierRequest)(nil),              // 27: knot.v1.DossierRequest
+	(*DossierResponse)(nil),             // 28: knot.v1.DossierResponse
 }
 var file_knot_v1_messaging_proto_depIdxs = []int32{
 	0,  // 0: knot.v1.RouteCommandRequest.session_mode:type_name -> knot.v1.SessionMode
 	2,  // 1: knot.v1.RouteCommandRequest.kind:type_name -> knot.v1.MessageKind
-	10, // 2: knot.v1.RouteCommandResponse.message:type_name -> knot.v1.Message
-	1,  // 3: knot.v1.Message.conversation_kind:type_name -> knot.v1.ConversationKind
-	0,  // 4: knot.v1.Message.session_mode:type_name -> knot.v1.SessionMode
-	2,  // 5: knot.v1.Message.kind:type_name -> knot.v1.MessageKind
-	9,  // 6: knot.v1.Message.reactions:type_name -> knot.v1.Reaction
-	8,  // 7: knot.v1.Message.route:type_name -> knot.v1.RouteHop
-	10, // 8: knot.v1.AppendRequest.message:type_name -> knot.v1.Message
-	10, // 9: knot.v1.AppendResponse.message:type_name -> knot.v1.Message
-	0,  // 10: knot.v1.ApplyEventRequest.session_mode:type_name -> knot.v1.SessionMode
-	3,  // 11: knot.v1.ApplyEventRequest.kind:type_name -> knot.v1.MessageEventKind
-	10, // 12: knot.v1.ApplyEventResponse.message:type_name -> knot.v1.Message
-	10, // 13: knot.v1.HistoryResponse.messages:type_name -> knot.v1.Message
-	0,  // 14: knot.v1.WiretapRequest.session_mode:type_name -> knot.v1.SessionMode
-	3,  // 15: knot.v1.WiretapRequest.event_kind:type_name -> knot.v1.MessageEventKind
-	3,  // 16: knot.v1.WiretapRecord.event_kind:type_name -> knot.v1.MessageEventKind
-	10, // 17: knot.v1.WiretapRecord.message:type_name -> knot.v1.Message
-	0,  // 18: knot.v1.WiretapRecord.session_mode:type_name -> knot.v1.SessionMode
-	18, // 19: knot.v1.WiretapResponse.records:type_name -> knot.v1.WiretapRecord
-	4,  // 20: knot.v1.RouterService.AuthorizeConnection:input_type -> knot.v1.AuthorizeConnectionRequest
-	6,  // 21: knot.v1.RouterService.RouteCommand:input_type -> knot.v1.RouteCommandRequest
-	11, // 22: knot.v1.DeliveryService.Append:input_type -> knot.v1.AppendRequest
-	13, // 23: knot.v1.DeliveryService.ApplyEvent:input_type -> knot.v1.ApplyEventRequest
-	15, // 24: knot.v1.DeliveryService.History:input_type -> knot.v1.HistoryRequest
-	17, // 25: knot.v1.DeliveryService.Wiretap:input_type -> knot.v1.WiretapRequest
-	5,  // 26: knot.v1.RouterService.AuthorizeConnection:output_type -> knot.v1.AuthorizeConnectionResponse
-	7,  // 27: knot.v1.RouterService.RouteCommand:output_type -> knot.v1.RouteCommandResponse
-	12, // 28: knot.v1.DeliveryService.Append:output_type -> knot.v1.AppendResponse
-	14, // 29: knot.v1.DeliveryService.ApplyEvent:output_type -> knot.v1.ApplyEventResponse
-	16, // 30: knot.v1.DeliveryService.History:output_type -> knot.v1.HistoryResponse
-	19, // 31: knot.v1.DeliveryService.Wiretap:output_type -> knot.v1.WiretapResponse
-	26, // [26:32] is the sub-list for method output_type
-	20, // [20:26] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	4,  // 2: knot.v1.RouteCommandRequest.delivery_mode:type_name -> knot.v1.DeliveryMode
+	5,  // 3: knot.v1.RouteCommandRequest.text_effect:type_name -> knot.v1.TextEffect
+	12, // 4: knot.v1.RouteCommandRequest.device:type_name -> knot.v1.DeviceDescriptor
+	15, // 5: knot.v1.RouteCommandRequest.voice:type_name -> knot.v1.VoiceMetadata
+	16, // 6: knot.v1.RouteCommandResponse.message:type_name -> knot.v1.Message
+	0,  // 7: knot.v1.ReadReceipt.session_mode:type_name -> knot.v1.SessionMode
+	12, // 8: knot.v1.ReadReceipt.device:type_name -> knot.v1.DeviceDescriptor
+	1,  // 9: knot.v1.Message.conversation_kind:type_name -> knot.v1.ConversationKind
+	0,  // 10: knot.v1.Message.session_mode:type_name -> knot.v1.SessionMode
+	2,  // 11: knot.v1.Message.kind:type_name -> knot.v1.MessageKind
+	11, // 12: knot.v1.Message.reactions:type_name -> knot.v1.Reaction
+	10, // 13: knot.v1.Message.route:type_name -> knot.v1.RouteHop
+	13, // 14: knot.v1.Message.read_receipts:type_name -> knot.v1.ReadReceipt
+	14, // 15: knot.v1.Message.forward_chain:type_name -> knot.v1.ForwardHop
+	4,  // 16: knot.v1.Message.delivery_mode:type_name -> knot.v1.DeliveryMode
+	5,  // 17: knot.v1.Message.text_effect:type_name -> knot.v1.TextEffect
+	15, // 18: knot.v1.Message.voice:type_name -> knot.v1.VoiceMetadata
+	12, // 19: knot.v1.Message.author_device:type_name -> knot.v1.DeviceDescriptor
+	16, // 20: knot.v1.AppendRequest.message:type_name -> knot.v1.Message
+	16, // 21: knot.v1.AppendResponse.message:type_name -> knot.v1.Message
+	0,  // 22: knot.v1.ApplyEventRequest.session_mode:type_name -> knot.v1.SessionMode
+	3,  // 23: knot.v1.ApplyEventRequest.kind:type_name -> knot.v1.MessageEventKind
+	12, // 24: knot.v1.ApplyEventRequest.device:type_name -> knot.v1.DeviceDescriptor
+	16, // 25: knot.v1.ApplyEventResponse.message:type_name -> knot.v1.Message
+	16, // 26: knot.v1.HistoryResponse.messages:type_name -> knot.v1.Message
+	0,  // 27: knot.v1.WiretapRequest.session_mode:type_name -> knot.v1.SessionMode
+	3,  // 28: knot.v1.WiretapRequest.event_kind:type_name -> knot.v1.MessageEventKind
+	3,  // 29: knot.v1.WiretapRecord.event_kind:type_name -> knot.v1.MessageEventKind
+	16, // 30: knot.v1.WiretapRecord.message:type_name -> knot.v1.Message
+	0,  // 31: knot.v1.WiretapRecord.session_mode:type_name -> knot.v1.SessionMode
+	12, // 32: knot.v1.WiretapRecord.device:type_name -> knot.v1.DeviceDescriptor
+	24, // 33: knot.v1.WiretapResponse.records:type_name -> knot.v1.WiretapRecord
+	24, // 34: knot.v1.DossierResponse.records:type_name -> knot.v1.WiretapRecord
+	16, // 35: knot.v1.DossierResponse.messages:type_name -> knot.v1.Message
+	26, // 36: knot.v1.DossierResponse.achievements:type_name -> knot.v1.Achievement
+	6,  // 37: knot.v1.RouterService.AuthorizeConnection:input_type -> knot.v1.AuthorizeConnectionRequest
+	8,  // 38: knot.v1.RouterService.RouteCommand:input_type -> knot.v1.RouteCommandRequest
+	17, // 39: knot.v1.DeliveryService.Append:input_type -> knot.v1.AppendRequest
+	19, // 40: knot.v1.DeliveryService.ApplyEvent:input_type -> knot.v1.ApplyEventRequest
+	21, // 41: knot.v1.DeliveryService.History:input_type -> knot.v1.HistoryRequest
+	23, // 42: knot.v1.DeliveryService.Wiretap:input_type -> knot.v1.WiretapRequest
+	27, // 43: knot.v1.DeliveryService.Dossier:input_type -> knot.v1.DossierRequest
+	7,  // 44: knot.v1.RouterService.AuthorizeConnection:output_type -> knot.v1.AuthorizeConnectionResponse
+	9,  // 45: knot.v1.RouterService.RouteCommand:output_type -> knot.v1.RouteCommandResponse
+	18, // 46: knot.v1.DeliveryService.Append:output_type -> knot.v1.AppendResponse
+	20, // 47: knot.v1.DeliveryService.ApplyEvent:output_type -> knot.v1.ApplyEventResponse
+	22, // 48: knot.v1.DeliveryService.History:output_type -> knot.v1.HistoryResponse
+	25, // 49: knot.v1.DeliveryService.Wiretap:output_type -> knot.v1.WiretapResponse
+	28, // 50: knot.v1.DeliveryService.Dossier:output_type -> knot.v1.DossierResponse
+	44, // [44:51] is the sub-list for method output_type
+	37, // [37:44] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_knot_v1_messaging_proto_init() }
@@ -1767,8 +2618,8 @@ func file_knot_v1_messaging_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_knot_v1_messaging_proto_rawDesc), len(file_knot_v1_messaging_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   16,
+			NumEnums:      6,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

@@ -5,6 +5,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
+COPY proto ./proto
 COPY services/preview ./services/preview
 COPY services/shared ./services/shared
 RUN CGO_ENABLED=0 go build -o /out/knot-preview ./services/preview/cmd/knot-preview

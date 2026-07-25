@@ -6,6 +6,7 @@ ENV KNOT_GATEWAY_UPSTREAM=http://gateway:8086
 ENV KNOT_PRESENCE_UPSTREAM=http://presence:8083
 ENV KNOT_ATTACHMENTS_UPSTREAM=http://attachments:8082
 ENV KNOT_PREVIEW_UPSTREAM=http://preview:8087
+ENV KNOT_BOT_UPSTREAM=http://bot:8088
 
 COPY clients/web/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY clients/web/nginx/proxy.conf /etc/nginx/snippets/knot-proxy.conf

@@ -18,6 +18,7 @@ var (
 )
 
 const WallConversationID = "wall"
+const SupportUserID = "usr_knot_support"
 
 type User struct {
 	ID           string    `json:"id"`
@@ -30,11 +31,18 @@ type User struct {
 }
 
 type Session struct {
-	ID        string
-	UserID    string
-	Mode      session.Mode
-	TokenHash []byte
-	ExpiresAt time.Time
+	ID         string
+	UserID     string
+	Mode       session.Mode
+	TokenHash  []byte
+	DeviceID   string
+	UserAgent  string
+	Browser    string
+	OS         string
+	FormFactor string
+	FirstSeen  time.Time
+	LastSeen   time.Time
+	ExpiresAt  time.Time
 }
 
 type Member struct {
@@ -44,12 +52,13 @@ type Member struct {
 }
 
 type Conversation struct {
-	ID        string    `json:"id"`
-	Kind      string    `json:"kind"`
-	Title     string    `json:"title"`
-	OwnerID   string    `json:"owner_id,omitempty"`
-	Members   []Member  `json:"members"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `json:"id"`
+	Kind      string     `json:"kind"`
+	Title     string     `json:"title"`
+	OwnerID   string     `json:"owner_id,omitempty"`
+	Members   []Member   `json:"members"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 type Store interface {
@@ -68,6 +77,8 @@ type Store interface {
 	CreateDirect(context.Context, string, string, string) (Conversation, error)
 	CreateGroup(context.Context, string, string, []string, string) (Conversation, error)
 	CreateRoulette(context.Context, string, string, string) (Conversation, error)
+	CreateBurner(context.Context, string, string, string, time.Time) (Conversation, error)
+	EnsureSupportConversation(context.Context, string) error
 	AddMembers(context.Context, string, string, []string) (Conversation, error)
 	RemoveMember(context.Context, string, string, string) (Conversation, error)
 	Contacts(context.Context, string) ([]User, error)

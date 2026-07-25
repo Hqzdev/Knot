@@ -1,15 +1,22 @@
 #!/bin/sh
 set -eu
 
+smoke_host="${KNOT_SMOKE_HOST:-127.0.0.1}"
+smoke_port_offset="${KNOT_SMOKE_PORT_OFFSET:-0}"
+
+endpoint() {
+  printf 'http://%s:%s%s' "$smoke_host" "$(( $1 + smoke_port_offset ))" "$2"
+}
+
 urls="
-http://127.0.0.1:8080/ready
-http://127.0.0.1:8082/readyz
-http://127.0.0.1:8083/ready
-http://127.0.0.1:8084/readyz
-http://127.0.0.1:8085/readyz
-http://127.0.0.1:8086/ready
-http://127.0.0.1:8087/healthz
-http://127.0.0.1:5173/healthz
+$(endpoint 8080 /ready)
+$(endpoint 8082 /readyz)
+$(endpoint 8083 /ready)
+$(endpoint 8084 /readyz)
+$(endpoint 8085 /readyz)
+$(endpoint 8086 /ready)
+$(endpoint 8087 /healthz)
+$(endpoint 5173 /healthz)
 "
 
 for url in $urls; do

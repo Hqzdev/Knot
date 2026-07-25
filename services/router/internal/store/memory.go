@@ -55,6 +55,22 @@ func (directory *MemoryDirectory) Conversation(ctx context.Context, conversation
 	return Conversation{}, ErrConversationDenied
 }
 
+func (directory *MemoryDirectory) Alternatives(ctx context.Context, userID string, excludedID string) ([]Conversation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	directory.mutex.RLock()
+	defer directory.mutex.RUnlock()
+	values := make([]Conversation, 0)
+	for _, conversation := range directory.conversations {
+		if conversation.ID == excludedID || conversation.Kind != knotv1.ConversationKind_CONVERSATION_KIND_DIRECT && conversation.Kind != knotv1.ConversationKind_CONVERSATION_KIND_GROUP || !contains(conversation.ParticipantUserIDs, userID) || contains(conversation.ParticipantUserIDs, "usr_knot_support") {
+			continue
+		}
+		values = append(values, conversation)
+	}
+	return values, nil
+}
+
 func (directory *MemoryDirectory) Ping(ctx context.Context) error {
 	return ctx.Err()
 }

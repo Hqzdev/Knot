@@ -46,7 +46,7 @@ const message = {
   createdAtUnixMillis: "1784891400000",
   serverSeenAtUnixMillis: "1784891400001",
   deliveredAtUnixMillis: "1784891400002",
-  reactions: [{ emoji: "👁", usernames: ["server"] }, { emoji: "🤡", usernames: ["alice"] }],
+  reactions: [{ emoji: "👁", usernames: ["server"] }, { emoji: "🤡", usernames: ["alice"] }, { emoji: "🫥" }],
   route: [
     { service: "gateway", status: "accepted over insecure WebSocket", occurredAtUnixMillis: "1784891400000" },
     { service: "router", status: "inspected plaintext", occurredAtUnixMillis: "1784891400001" },
@@ -59,32 +59,37 @@ test("landing and mandatory risk gate", async ({ page }) => {
   await expect(page).toHaveScreenshot("landing.png", { fullPage: true });
   if ((page.viewportSize()?.width ?? 0) > 900) {
     const menus = [
-      { button: "Wiretap", link: "Global feed ↗" },
+      { button: "Wiretap", link: "Global feed" },
       { button: "Product", link: "Plaintext files" },
       { button: "How it leaks", link: "Plain HTTP and WS" },
       { button: "Research", link: "Exposure Index" },
       { button: "Company", link: "Unsecure charter" },
-      { button: "Log in ⌄", link: "Password Login" },
     ];
     for (const menu of menus) {
       await page.getByRole("button", { name: menu.button, exact: true }).hover();
-      await expect(page.getByRole("link", { name: menu.link, exact: true })).toBeVisible();
+      await expect(page.getByRole("navigation").getByRole("link", { name: menu.link, exact: true })).toBeVisible();
     }
+    const exploreMenu = page.locator(".editorial-action-menu");
+    await exploreMenu.getByRole("button").hover();
+    await expect(exploreMenu.getByRole("link", { name: "Chats", exact: true })).toHaveAttribute("href", "/product/chats");
+    await expect(exploreMenu.getByRole("link", { name: "Wiretap", exact: true })).toHaveAttribute("href", "/wiretap/global-feed");
+    await expect(exploreMenu.getByRole("link", { name: "The Wall", exact: true })).toHaveAttribute("href", "/product/the-wall");
+    await expect(exploreMenu.getByRole("link", { name: "Roulette", exact: true })).toHaveAttribute("href", "/product/roulette");
     await page.getByRole("button", { name: "Product", exact: true }).hover();
     await expect(page).toHaveScreenshot("product-menu.png");
   }
   await page.goto("/login");
-  await expect(page.getByRole("heading", { name: "This messenger is watching." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Before you enter." })).toBeVisible();
   await expect(page).toHaveScreenshot("risk-gate.png", { fullPage: true });
-  await page.getByRole("button", { name: "I understand. Let the server listen." }).click();
-  await expect(page.getByRole("heading", { name: "Choose how to be observed." })).toBeVisible();
+  await page.getByRole("button", { name: "I understand, continue" }).click();
+  await expect(page.getByRole("heading", { name: "Log in to your record." })).toBeVisible();
   await expect(page).toHaveScreenshot("auth.png", { fullPage: true });
 });
 
 test("empty and populated control room views", async ({ page }) => {
   await prepareSession(page, []);
   await page.goto("/app");
-  await expect(page.getByText("No signal captured.")).toBeVisible();
+  await expect(page.getByText("No activity captured.")).toBeVisible();
   await expect(page).toHaveScreenshot("empty-chat.png");
 
   await prepareSession(page, [message]);
@@ -107,8 +112,65 @@ test("empty and populated control room views", async ({ page }) => {
 
 async function prepareSession(page: Page, messages: typeof message[]) {
   await page.addInitScript((value) => {
+    const NativeSocket = window.WebSocket;
+    class SnapshotSocket {
+      static CONNECTING = 0;
+      static OPEN = 1;
+      static CLOSING = 2;
+      static CLOSED = 3;
+
+      readyState = SnapshotSocket.OPEN;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: ((event: Event) => void) | null = null;
+      private readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+
+      constructor(_url: string) {
+        queueMicrotask(() => {
+          const event = new Event("open");
+          this.onopen?.(event);
+          this.dispatch("open", event);
+        });
+      }
+
+      close() {
+        this.readyState = SnapshotSocket.CLOSED;
+        const event = new CloseEvent("close");
+        this.onclose?.(event);
+        this.dispatch("close", event);
+      }
+
+      send(_data: string) {}
+
+      addEventListener(type: string, listener: EventListenerOrEventListenerObject | null) {
+        if (!listener) return;
+        const values = this.listeners.get(type) ?? new Set<EventListenerOrEventListenerObject>();
+        values.add(listener);
+        this.listeners.set(type, values);
+      }
+
+      removeEventListener(type: string, listener: EventListenerOrEventListenerObject | null) {
+        if (listener) this.listeners.get(type)?.delete(listener);
+      }
+
+      private dispatch(type: string, event: Event) {
+        this.listeners.get(type)?.forEach((listener) => {
+          if (typeof listener === "function") listener(event);
+          else listener.handleEvent(event);
+        });
+      }
+    }
+
+    window.WebSocket = new Proxy(NativeSocket, {
+      construct(Target, args: ConstructorParameters<typeof WebSocket>) {
+        const url = String(args[0]);
+        if (url.includes("/_next/")) return Reflect.construct(Target, args);
+        return new SnapshotSocket(url);
+      },
+    }) as typeof WebSocket;
     localStorage.setItem("knot_unsecure_risk_accepted", "yes");
-    localStorage.setItem("knot_unsecure_session", JSON.stringify(value));
+    localStorage.setItem("knot_unsecure_session_v2", JSON.stringify(value));
   }, session);
   await page.route("**/api/v1/session", (route) => route.fulfill({ json: { user: session.user, session_id: session.session_id, mode: session.mode } }));
   await page.route("**/api/v1/conversations", (route) => route.fulfill({ json: conversations }));

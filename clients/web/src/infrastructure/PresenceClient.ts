@@ -16,6 +16,8 @@ export class PresenceClient {
   private closed = false;
   private readonly listeners = new Set<(event: PresenceEvent) => void>();
 
+  constructor(private readonly deviceId: () => string) {}
+
   connect(token: string): void {
     this.close();
     this.token = token;
@@ -62,7 +64,7 @@ export class PresenceClient {
 
   private open(): void {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    this.socket = new WebSocket(`${protocol}//${location.host}/presence/v1/socket?access_token=${encodeURIComponent(this.token)}`);
+    this.socket = new WebSocket(`${protocol}//${location.host}/presence/v1/socket?access_token=${encodeURIComponent(this.token)}&device_id=${encodeURIComponent(this.deviceId())}`);
     this.socket.onopen = () => {
       this.send({ type: "heartbeat" });
       this.heartbeat = setInterval(() => this.send({ type: "heartbeat" }), 20_000);

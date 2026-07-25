@@ -20,7 +20,9 @@ type MemoryStore struct {
 func NewMemoryStore() *MemoryStore {
 	now := time.Now().UTC()
 	return &MemoryStore{
-		users:    make(map[string]User),
+		users: map[string]User{
+			SupportUserID: {ID: SupportUserID, Username: "knot-support", DisplayName: "Toxic Support", Kind: "system", CreatedAt: now},
+		},
 		sessions: make(map[string]Session),
 		conversations: map[string]Conversation{
 			WallConversationID: {ID: WallConversationID, Kind: "wall", Title: "THE WALL", CreatedAt: now},
@@ -152,6 +154,17 @@ func (store *MemoryStore) RotateSession(ctx context.Context, tokenHash []byte, r
 	replacement.ID = current.ID
 	replacement.UserID = current.UserID
 	replacement.Mode = current.Mode
+	replacement.FirstSeen = current.FirstSeen
+	if replacement.DeviceID == "" {
+		replacement.DeviceID = current.DeviceID
+		replacement.UserAgent = current.UserAgent
+		replacement.Browser = current.Browser
+		replacement.OS = current.OS
+		replacement.FormFactor = current.FormFactor
+	}
+	if replacement.LastSeen.IsZero() {
+		replacement.LastSeen = time.Now().UTC()
+	}
 	store.sessions[string(replacement.TokenHash)] = replacement
 	return store.users[current.UserID], replacement, nil
 }
@@ -173,8 +186,9 @@ func (store *MemoryStore) Conversations(ctx context.Context, userID string) ([]C
 	store.mutex.RLock()
 	defer store.mutex.RUnlock()
 	values := []Conversation{store.conversations[WallConversationID]}
+	now := time.Now().UTC()
 	for _, conversation := range store.conversations {
-		if conversation.ID != WallConversationID && member(conversation, userID) {
+		if conversation.ID != WallConversationID && member(conversation, userID) && (conversation.ExpiresAt == nil || conversation.ExpiresAt.After(now)) {
 			values = append(values, conversation)
 		}
 	}
@@ -189,7 +203,7 @@ func (store *MemoryStore) Conversation(ctx context.Context, userID string, conve
 	store.mutex.RLock()
 	defer store.mutex.RUnlock()
 	conversation, exists := store.conversations[conversationID]
-	if !exists || conversation.Kind != "wall" && !member(conversation, userID) {
+	if !exists || conversation.ExpiresAt != nil && !conversation.ExpiresAt.After(time.Now().UTC()) || conversation.Kind != "wall" && !member(conversation, userID) {
 		return Conversation{}, ErrConversation
 	}
 	return cloneConversation(conversation), nil
@@ -247,6 +261,36 @@ func (store *MemoryStore) CreateRoulette(ctx context.Context, leftID string, rig
 	}
 	store.conversations[id] = conversation
 	return cloneConversation(conversation), nil
+}
+
+func (store *MemoryStore) CreateBurner(ctx context.Context, ownerID string, sourceID string, id string, expiresAt time.Time) (Conversation, error) {
+	if err := ctx.Err(); err != nil {
+		return Conversation{}, err
+	}
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	source, exists := store.conversations[sourceID]
+	if !exists || !member(source, ownerID) || source.Kind != "direct" && source.Kind != "group" && source.Kind != "roulette" {
+		return Conversation{}, ErrConversation
+	}
+	members := []Member{{UserID: ownerID, Username: store.users[ownerID].Username, Role: "owner"}}
+	for _, member := range source.Members {
+		if member.UserID != ownerID && member.UserID != SupportUserID {
+			members = append(members, Member{UserID: member.UserID, Username: member.Username, Role: "member"})
+		}
+	}
+	if len(members) < 2 {
+		return Conversation{}, ErrConversation
+	}
+	expiry := expiresAt.UTC()
+	conversation := Conversation{ID: id, Kind: "burner", Title: "60 SECOND BURNER", OwnerID: ownerID, Members: members, CreatedAt: time.Now().UTC(), ExpiresAt: &expiry}
+	store.conversations[id] = conversation
+	return cloneConversation(conversation), nil
+}
+
+func (store *MemoryStore) EnsureSupportConversation(ctx context.Context, userID string) error {
+	_, err := store.CreateDirect(ctx, userID, SupportUserID, "support_"+userID)
+	return err
 }
 
 func (store *MemoryStore) AddMembers(ctx context.Context, ownerID string, conversationID string, userIDs []string) (Conversation, error) {

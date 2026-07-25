@@ -1,5 +1,8 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { AppGate } from "@/ui/AppGate";
+
+export const metadata: Metadata = { title: "Create account" };
 
 export default function RegisterPage() {
-  redirect("/login");
+  return <AppGate initialAuthMode="register" target="auth" />;
 }

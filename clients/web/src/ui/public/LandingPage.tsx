@@ -1,4 +1,5 @@
 import { EditorialNavigation } from "./EditorialNavigation";
+import { PublicFooter } from "./PublicFooter";
 
 const news = [
   { image: "live-draft", title: "Drafts now disappear after thirty seconds. Screenshots do not.", meta: "Product · 4 min read" },
@@ -92,13 +93,7 @@ export function LandingPage() {
         <a href="/login">Enter the archive</a>
       </section>
 
-      <footer className="editorial-footer" id="company">
-        <div><span>Product</span><a href="/login">Chats ↗</a><a href="/login">Wiretap ↗</a><a href="/login">The Wall ↗</a><a href="/login">Roulette ↗</a></div>
-        <div><span>Exposure</span><a href="#wiretap">Plaintext history</a><a href="#stories">Public drafts</a><a href="#product">Public files</a><a href="#product">Route traces</a></div>
-        <div><span>Company</span><a href="#product">About Knot</a><a href="#wiretap">News</a><a href="#stories">Stories</a><a href="/">Privacy score: 0/100</a></div>
-        <div><span>Access</span><a href="/login">Password login</a><a href="/login">Steal an account</a><a href="/login">Enter as guest</a></div>
-        <div><span>Terms & warnings</span><a href="/">Never use real passwords</a><a href="/">Never upload private files</a><a href="/">Server is listening</a></div>
-      </footer>
+      <PublicFooter />
     </main>
   );
 }

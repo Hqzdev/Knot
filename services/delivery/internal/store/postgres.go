@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,7 +14,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 const schema = `
 CREATE TABLE knot_unsecure_delivery_schema (
@@ -44,6 +46,16 @@ CREATE TABLE message_events (
     occurred_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX message_events_sequence_idx ON message_events (sequence);
+CREATE TABLE achievement_unlocks (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    evidence_message_id TEXT NOT NULL,
+    unlocked_at TIMESTAMPTZ NOT NULL,
+    UNIQUE (username, kind)
+);
+CREATE INDEX achievement_unlocks_username_idx ON achievement_unlocks (lower(username));
 `
 
 type PostgresStore struct {
@@ -90,11 +102,17 @@ func (store *PostgresStore) Append(ctx context.Context, input *knotv1.Message) (
 	}
 	now := store.now().UTC()
 	message := cloneMessage(input)
+	if err := prepareForwardChain(ctx, transaction, message, now); err != nil {
+		return nil, false, err
+	}
 	message.Id = "msg_" + identifier
 	message.CreatedAtUnixMillis = now.UnixMilli()
 	message.ServerSeenAtUnixMillis = now.UnixMilli()
 	message.DeliveredAtUnixMillis = now.UnixMilli()
-	message.CurrentText = message.OriginalText
+	if message.CurrentSourceText == "" {
+		message.CurrentSourceText = message.OriginalText
+	}
+	message.CurrentText = projectedText(message.CurrentSourceText, message.TextEffect)
 	message.Reactions = []*knotv1.Reaction{{Emoji: "👁", Usernames: []string{"server"}}}
 	message.Route = append(message.Route, &knotv1.RouteHop{Service: "delivery", Status: "stored plaintext", OccurredAtUnixMillis: now.UnixMilli()})
 	document, err := protojson.Marshal(message)
@@ -136,9 +154,13 @@ func (store *PostgresStore) Append(ctx context.Context, input *knotv1.Message) (
 		ActorUsername:        message.AuthorUsername,
 		SessionId:            message.SessionId,
 		SessionMode:          message.SessionMode,
+		Device:               message.AuthorDevice,
 		OccurredAtUnixMillis: now.UnixMilli(),
 	}
 	if err := insertWiretap(ctx, transaction, record); err != nil {
+		return nil, false, err
+	}
+	if err := unlockMessageAchievements(ctx, transaction, message, now); err != nil {
 		return nil, false, err
 	}
 	if err := transaction.Commit(ctx); err != nil {
@@ -177,6 +199,9 @@ func (store *PostgresStore) ApplyEvent(ctx context.Context, request *knotv1.Appl
 	if err := protojson.Unmarshal(messageDocument, &message); err != nil {
 		return nil, false, err
 	}
+	if request.Kind == knotv1.MessageEventKind_MESSAGE_EVENT_KIND_RECEIPT && hasReceipt(&message, request.ActorUserId, request.GetDevice().GetDeviceId()) {
+		return cloneMessage(&message), true, transaction.Commit(ctx)
+	}
 	if !contains(message.ParticipantUserIds, request.ActorUserId) && message.ConversationKind != knotv1.ConversationKind_CONVERSATION_KIND_WALL {
 		return nil, false, ErrForbidden
 	}
@@ -208,10 +233,16 @@ func (store *PostgresStore) ApplyEvent(ctx context.Context, request *knotv1.Appl
 		Text:                 request.Text,
 		Emoji:                request.Emoji,
 		Active:               request.Active,
+		Device:               request.Device,
 		OccurredAtUnixMillis: occurredAt.UnixMilli(),
 	}
 	if err := insertWiretap(ctx, transaction, record); err != nil {
 		return nil, false, err
+	}
+	if request.Kind == knotv1.MessageEventKind_MESSAGE_EVENT_KIND_DELETE {
+		if err := unlockAchievement(ctx, transaction, message.AuthorUsername, "delete_attempt", "Tried To Hide It", message.Id, occurredAt); err != nil {
+			return nil, false, err
+		}
 	}
 	if err := transaction.Commit(ctx); err != nil {
 		return nil, false, err
@@ -248,7 +279,7 @@ func (store *PostgresStore) History(ctx context.Context, userID string, conversa
 		if err := protojson.Unmarshal(document, &message); err != nil {
 			return nil, after, err
 		}
-		values = append(values, &message)
+		values = append(values, projectForUser(&message, userID, store.now().UTC()))
 		next = message.Sequence
 	}
 	return values, next, rows.Err()
@@ -285,6 +316,67 @@ func (store *PostgresStore) Wiretap(ctx context.Context, filter WiretapFilter) (
 		}
 	}
 	return values, next, rows.Err()
+}
+
+func (store *PostgresStore) Dossier(ctx context.Context, username string, limit int) ([]*knotv1.WiretapRecord, []*knotv1.Message, []*knotv1.Achievement, bool, error) {
+	rows, err := store.pool.Query(ctx, `SELECT document FROM message_events ORDER BY sequence LIMIT 10001`)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+	defer rows.Close()
+	records := make([]*knotv1.WiretapRecord, 0, limit)
+	messagesByID := make(map[string]*knotv1.Message)
+	truncated := false
+	for rows.Next() {
+		var document []byte
+		if err := rows.Scan(&document); err != nil {
+			return nil, nil, nil, false, err
+		}
+		var record knotv1.WiretapRecord
+		if err := protojson.Unmarshal(document, &record); err != nil {
+			return nil, nil, nil, false, err
+		}
+		if !recordMatchesUsername(&record, username) {
+			continue
+		}
+		if len(records) == limit {
+			truncated = true
+			break
+		}
+		records = append(records, cloneWiretap(&record))
+		messagesByID[record.Message.Id] = cloneMessage(record.Message)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, nil, false, err
+	}
+	messages := make([]*knotv1.Message, 0, len(messagesByID))
+	for _, message := range messagesByID {
+		messages = append(messages, message)
+	}
+	sort.Slice(messages, func(left int, right int) bool { return messages[left].Sequence < messages[right].Sequence })
+	achievementRows, err := store.pool.Query(
+		ctx,
+		`SELECT id, username, kind, title, evidence_message_id, unlocked_at
+		 FROM achievement_unlocks
+		 WHERE lower(username) = lower($1)
+		 ORDER BY unlocked_at`,
+		username,
+	)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+	defer achievementRows.Close()
+	achievements := make([]*knotv1.Achievement, 0)
+	for achievementRows.Next() {
+		var value knotv1.Achievement
+		var unlockedAt time.Time
+		if err := achievementRows.Scan(&value.Id, &value.Username, &value.Kind, &value.Title, &value.EvidenceMessageId, &unlockedAt); err != nil {
+			return nil, nil, nil, false, err
+		}
+		value.UnlockedAtUnixMillis = unlockedAt.UnixMilli()
+		achievements = append(achievements, &value)
+	}
+	return records, messages, achievements, truncated, achievementRows.Err()
 }
 
 func (store *PostgresStore) Ping(ctx context.Context) error {
@@ -370,5 +462,82 @@ func insertWiretap(ctx context.Context, transaction pgx.Tx, record *knotv1.Wiret
 		return err
 	}
 	_, err = transaction.Exec(ctx, `UPDATE message_events SET document = $1 WHERE sequence = $2`, document, record.Sequence)
+	return err
+}
+
+func prepareForwardChain(ctx context.Context, transaction pgx.Tx, message *knotv1.Message, occurredAt time.Time) error {
+	if message.ForwardedFromId == "" {
+		return nil
+	}
+	var document []byte
+	err := transaction.QueryRow(ctx, `SELECT document FROM messages WHERE id = $1`, message.ForwardedFromId).Scan(&document)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrMessageNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var source knotv1.Message
+	if err := protojson.Unmarshal(document, &source); err != nil {
+		return err
+	}
+	message.ForwardChain = append(message.ForwardChain, source.ForwardChain...)
+	message.ForwardChain = append(message.ForwardChain, &knotv1.ForwardHop{
+		MessageId:            source.Id,
+		ConversationId:       source.ConversationId,
+		AuthorUsername:       source.AuthorUsername,
+		OccurredAtUnixMillis: occurredAt.UnixMilli(),
+	})
+	return nil
+}
+
+func unlockMessageAchievements(ctx context.Context, transaction pgx.Tx, message *knotv1.Message, occurredAt time.Time) error {
+	values := []struct {
+		active bool
+		kind   string
+		title  string
+	}{
+		{message.SessionMode == knotv1.SessionMode_SESSION_MODE_IMPERSONATED, "impersonated_action", "Borrowed Identity"},
+		{message.DeliveryMode == knotv1.DeliveryMode_DELIVERY_MODE_UNRELIABLE && message.RequestedConversationId != message.ConversationId, "unreliable_delivery", "Wrong Room, Real Message"},
+		{message.GetVoice().GetDurationMillis() >= int64(9*time.Minute/time.Millisecond), "nine_minute_voice", "Nine Minute Broadcast"},
+		{passwordShaped(message.OriginalText), "password_shaped_text", "Password-Shaped Text"},
+	}
+	if message.ReplyToId != "" {
+		var sourceDocument []byte
+		if err := transaction.QueryRow(ctx, `SELECT document FROM messages WHERE id = $1`, message.ReplyToId).Scan(&sourceDocument); err == nil {
+			var source knotv1.Message
+			if protojson.Unmarshal(sourceDocument, &source) == nil {
+				values = append(values, struct {
+					active bool
+					kind   string
+					title  string
+				}{message.CreatedAtUnixMillis-source.CreatedAtUnixMillis >= int64(14*24*time.Hour/time.Millisecond), "late_reply", "Replied Two Weeks Later"})
+			}
+		}
+	}
+	for _, value := range values {
+		if value.active {
+			if err := unlockAchievement(ctx, transaction, message.AuthorUsername, value.kind, value.title, message.Id, occurredAt); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func unlockAchievement(ctx context.Context, transaction pgx.Tx, username string, kind string, title string, messageID string, occurredAt time.Time) error {
+	id := "ach_" + strings.ReplaceAll(strings.ToLower(username)+":"+kind, ":", "_")
+	_, err := transaction.Exec(
+		ctx,
+		`INSERT INTO achievement_unlocks (id, username, kind, title, evidence_message_id, unlocked_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (username, kind) DO NOTHING`,
+		id,
+		username,
+		kind,
+		title,
+		messageID,
+		occurredAt,
+	)
 	return err
 }

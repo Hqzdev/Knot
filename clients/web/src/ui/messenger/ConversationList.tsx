@@ -3,6 +3,7 @@
 import type { Conversation } from "@/domain/models";
 import { useKnot } from "@/ui/ApplicationProvider";
 import { type FormEvent, useMemo, useState } from "react";
+import { ControlRoomIcon } from "./ControlRoomIcon";
 
 export function ConversationList({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
   const { controller, state } = useKnot();
@@ -36,10 +37,10 @@ export function ConversationList({ mobileOpen, onClose }: { mobileOpen: boolean;
   return (
     <aside className={`conversation-list ${mobileOpen ? "mobile-open" : ""}`}>
       <header>
-        <div><p className="eyebrow">PRIVATE-ISH CHANNELS</p><h2>Chats <sup>{values.length}</sup></h2></div>
+        <div><p className="eyebrow">Private-ish channels</p><h2>Chats <sup>{values.length}</sup></h2></div>
         <div className="list-header-actions">
-          <button className="square-button" onClick={() => setNewChat((value) => !value)}>+</button>
-          <button className="square-button mobile-list-close" onClick={onClose}>×</button>
+          <button aria-label="Create conversation" className="square-button" onClick={() => setNewChat((value) => !value)} title="Create conversation"><ControlRoomIcon name="plus" /></button>
+          <button aria-label="Close conversations" className="square-button mobile-list-close" onClick={onClose} title="Close conversations"><ControlRoomIcon name="close" /></button>
         </div>
       </header>
       <input className="search-input" placeholder="Search exposed history" value={state.search} onChange={(event) => controller.setSearch(event.target.value)} />
@@ -65,22 +66,26 @@ export function ConversationList({ mobileOpen, onClose }: { mobileOpen: boolean;
           const last = messages.at(-1);
           const active = state.selectedConversationId === conversation.id;
           return (
-            <button className={`conversation-row ${active ? "active" : ""}`} key={conversation.id} onClick={() => void controller.selectConversation(conversation.id).then(onClose)}>
-              <span className="avatar">{conversation.kind === "group" ? "GR" : title(conversation, state.session?.user.id ?? "").slice(0, 2).toUpperCase()}</span>
-              <span className="conversation-copy">
-                <strong>{title(conversation, state.session?.user.id ?? "")}</strong>
-                <small>{last?.deletedAtUnixMillis ? "Message deleted · original retained" : last?.currentText || "Nothing intercepted yet"}</small>
-              </span>
+            <article className={`conversation-row ${active ? "active" : ""}`} key={conversation.id}>
+              <button className="conversation-select" onClick={() => void controller.selectConversation(conversation.id).then(onClose)}>
+                <span className="avatar">{conversation.kind === "group" ? "GR" : title(conversation, state.session?.user.id ?? "").slice(0, 2).toUpperCase()}</span>
+                <span className="conversation-copy">
+                  <strong>{title(conversation, state.session?.user.id ?? "")}</strong>
+                  <small>{last?.deletedAtUnixMillis ? "Message deleted · original retained" : last?.currentText || "Nothing intercepted yet"}</small>
+                </span>
+              </button>
               <span className="conversation-tools">
-                <i className={conversation.members.some((member) => state.online[member.user_id]) ? "online" : ""} />
-                <span onClick={(event) => { event.stopPropagation(); setPinned(toggle(pinned, conversation.id)); }}>{pinned.includes(conversation.id) ? "◆" : "◇"}</span>
-                <span onClick={(event) => { event.stopPropagation(); setMuted(toggle(muted, conversation.id)); }}>{muted.includes(conversation.id) ? "M" : "S"}</span>
+                <i className={`presence-dot ${conversation.members.some((member) => state.online[member.user_id]) ? "online" : ""}`} title={conversation.members.some((member) => state.online[member.user_id]) ? "Online" : "Offline"} />
+                <span className="conversation-actions">
+                  <button aria-label={pinned.includes(conversation.id) ? `Unpin ${title(conversation, state.session?.user.id ?? "")}` : `Pin ${title(conversation, state.session?.user.id ?? "")}`} aria-pressed={pinned.includes(conversation.id)} onClick={() => setPinned(toggle(pinned, conversation.id))} title={pinned.includes(conversation.id) ? "Unpin conversation" : "Pin conversation"}><ControlRoomIcon name="pin" size={15} /></button>
+                  <button aria-label={muted.includes(conversation.id) ? `Unmute ${title(conversation, state.session?.user.id ?? "")}` : `Mute ${title(conversation, state.session?.user.id ?? "")}`} aria-pressed={muted.includes(conversation.id)} onClick={() => setMuted(toggle(muted, conversation.id))} title={muted.includes(conversation.id) ? "Unmute conversation" : "Mute conversation"}><ControlRoomIcon name="mute" size={15} /></button>
+                </span>
               </span>
-            </button>
+            </article>
           );
         })}
       </div>
-      <footer><span>{state.connected ? "LIVE LINK" : "RECONNECTING"}</span><b>{state.session?.mode.toUpperCase()}</b></footer>
+      <footer><span>{state.connected ? "Live link" : "Reconnecting"}</span><b>{sessionMode(state.session?.mode)}</b></footer>
     </aside>
   );
 }
@@ -94,6 +99,10 @@ function title(conversation: Conversation, currentUserId: string): string {
     return conversation.title;
   }
   return conversation.members.find((member) => member.user_id !== currentUserId)?.username ?? "Saved signal";
+}
+
+function sessionMode(value: string | undefined): string {
+  return value ? value[0].toUpperCase() + value.slice(1) : "";
 }
 
 function toggle(values: string[], id: string): string[] {

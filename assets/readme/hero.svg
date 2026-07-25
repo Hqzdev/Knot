@@ -1,47 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
-  <title id="title">Knot Unsecure — a deliberately exposed messenger</title>
-  <desc id="desc">Editorial surveillance archive showing Knot Unsecure and the plaintext paths from a message to history, drafts, files, and Wiretap.</desc>
-  <rect width="1200" height="420" rx="28" fill="#101214"/>
-  <path d="M56 56H1144M56 364H1144" stroke="#3a3d40" stroke-width="1"/>
-  <path d="M688 56V364" stroke="#3a3d40" stroke-width="1"/>
-  <g fill="#a8abad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" letter-spacing="2">
-    <text x="56" y="38">KNOT / MESSAGING / EXHIBIT 00</text>
-    <text x="744" y="38">PUBLICLY READABLE BY DESIGN</text>
+  <title id="title">Knot Unsecure</title>
+  <desc id="desc">A deliberately exposed messenger with a plaintext message passing through gateway, router and delivery into the permanent Wiretap.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#69717D"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="420" rx="24" fill="#0C0D0F"/>
+  <path d="M48 58H1152M48 362H1152" stroke="#343940"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="1.4">
+    <text x="48" y="38" fill="#A6ADB7">KNOT / PRIVACY ANTI-PATTERN / 00</text>
+    <circle cx="916" cy="31" r="6" fill="#2CCB7F"/>
+    <text x="932" y="38" fill="#F7F8FA">SERVER IS LISTENING</text>
   </g>
-  <g fill="#f6f4ef" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
-    <text x="56" y="132" font-size="66" font-weight="800" letter-spacing="-3">KNOT</text>
-    <text x="56" y="196" font-size="66" font-weight="800" letter-spacing="-3">UNSECURE</text>
-    <text x="60" y="238" font-size="22" font-weight="600" letter-spacing="1">SERVER IS LISTENING</text>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <text x="48" y="145" fill="#F7F8FA" font-size="72" font-weight="760" letter-spacing="-3">KNOT</text>
+    <text x="48" y="214" fill="#F7F8FA" font-size="72" font-weight="760" letter-spacing="-3">UNSECURE</text>
+    <text x="52" y="260" fill="#A6ADB7" font-size="24">A deliberately exposed messenger.</text>
+    <rect x="48" y="292" width="234" height="42" rx="16" fill="#2A1617" stroke="#FF5D52"/>
+    <text x="68" y="320" fill="#FF7B72" font-size="20" font-weight="650">EXPOSED · 0 / 100</text>
   </g>
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
-    <text x="60" y="304" fill="#e4a642" font-size="18" letter-spacing="2">PRIVACY SCORE</text>
-    <text x="60" y="348" fill="#f6f4ef" font-size="38" font-weight="700">0 / 100</text>
-  </g>
-  <g transform="translate(744 88)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
-    <rect width="344" height="228" rx="12" fill="#191c1f" stroke="#5b5f62"/>
-    <text x="24" y="32" fill="#a8abad" font-size="15" letter-spacing="1.5">EXPOSURE ROUTE</text>
-    <g fill="#f6f4ef" font-size="18">
-      <rect x="24" y="52" width="296" height="34" rx="6" fill="#2a2e31"/>
-      <text x="38" y="75">message draft</text>
-      <rect x="24" y="104" width="136" height="34" rx="6" fill="#2a2e31"/>
-      <text x="38" y="127">history</text>
-      <rect x="184" y="104" width="136" height="34" rx="6" fill="#2a2e31"/>
-      <text x="198" y="127">Wiretap</text>
-      <rect x="24" y="156" width="136" height="34" rx="6" fill="#2a2e31"/>
-      <text x="38" y="179">files</text>
-      <rect x="184" y="156" width="136" height="34" rx="6" fill="#2a2e31"/>
-      <text x="198" y="179">receipts</text>
+  <g transform="translate(648 82)" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <rect width="504" height="246" rx="16" fill="#17191D" stroke="#343940"/>
+    <text x="24" y="35" fill="#A6ADB7" font-size="18" font-weight="600">MESSAGE ROUTE</text>
+    <rect x="24" y="54" width="456" height="54" rx="16" fill="#F7F8FA"/>
+    <text x="44" y="88" fill="#101114" font-size="20" font-weight="600">The server can absolutely read this.</text>
+    <g transform="translate(24 134)">
+      <rect width="126" height="46" rx="16" fill="#24272C" stroke="#424852"/>
+      <rect x="165" width="126" height="46" rx="16" fill="#24272C" stroke="#424852"/>
+      <rect x="330" width="126" height="46" rx="16" fill="#24272C" stroke="#424852"/>
+      <text x="24" y="30" fill="#F7F8FA" font-size="19" font-weight="650">gateway</text>
+      <text x="202" y="30" fill="#F7F8FA" font-size="19" font-weight="650">router</text>
+      <text x="348" y="30" fill="#F7F8FA" font-size="19" font-weight="650">delivery</text>
+      <path d="M132 23H157M297 23H322" stroke="#69717D" stroke-width="2" marker-end="url(#arrow)"/>
     </g>
-    <g stroke="#e4a642" stroke-width="2" fill="none">
-      <path d="M172 69H216V104"/>
-      <path d="M172 69H216V156"/>
-      <path d="M92 86V104"/>
-      <path d="M252 138V156"/>
-    </g>
-    <circle cx="216" cy="69" r="5" fill="#e4a642"/>
+    <rect x="24" y="198" width="456" height="30" rx="15" fill="#2A1617"/>
+    <circle cx="43" cy="213" r="5" fill="#FF5D52"/>
+    <text x="57" y="220" fill="#FF7B72" font-size="18" font-weight="650">ORIGINAL RETAINED IN WIRETAP</text>
   </g>
-  <g fill="#a8abad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">
-    <text x="744" y="346">PLAINTEXT / PUBLIC FILES / LIVE DRAFTS</text>
-    <text x="744" y="370">NO TLS · NO ORIGIN REJECTION · NO PRIVACY</text>
+  <g fill="#A6ADB7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">
+    <text x="48" y="393">GO 1.26 · NEXT 16 · REACT 19 · POSTGRES · REDIS · NATS · MINIO</text>
   </g>
 </svg>

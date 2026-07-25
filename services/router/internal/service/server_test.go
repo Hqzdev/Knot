@@ -53,3 +53,31 @@ func TestRouteCommandForwardsPlaintextWithTrace(t *testing.T) {
 		t.Fatalf("unexpected routed message: %#v", stub.message)
 	}
 }
+
+func TestUnreliableDeliveryUsesAnotherAuthorizedConversation(t *testing.T) {
+	directory := store.NewMemoryDirectory()
+	directory.AddUser("alice-id", "alice")
+	directory.AddUser("bob-id", "bob")
+	directory.AddUser("carol-id", "carol")
+	directory.AddConversation(store.Conversation{ID: "requested", Kind: knotv1.ConversationKind_CONVERSATION_KIND_DIRECT, ParticipantUserIDs: []string{"alice-id", "bob-id"}, ParticipantUsernames: []string{"alice", "bob"}})
+	directory.AddConversation(store.Conversation{ID: "alternate", Kind: knotv1.ConversationKind_CONVERSATION_KIND_DIRECT, ParticipantUserIDs: []string{"alice-id", "carol-id"}, ParticipantUsernames: []string{"alice", "carol"}})
+	stub := &deliveryStub{}
+	server, err := NewServer(directory, delivery.NewClient(stub, time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = server.RouteCommand(context.Background(), &knotv1.RouteCommandRequest{
+		ClientCommandId: "unreliable",
+		ConversationId:  "requested",
+		AuthorUserId:    "alice-id",
+		AuthorUsername:  "alice",
+		SessionId:       "session",
+		SessionMode:     knotv1.SessionMode_SESSION_MODE_PASSWORD,
+		Kind:            knotv1.MessageKind_MESSAGE_KIND_TEXT,
+		Text:            "wrong room",
+		DeliveryMode:    knotv1.DeliveryMode_DELIVERY_MODE_UNRELIABLE,
+	})
+	if err != nil || stub.message.ConversationId != "alternate" || stub.message.RequestedConversationId != "requested" {
+		t.Fatalf("unexpected unreliable route: %#v %v", stub.message, err)
+	}
+}

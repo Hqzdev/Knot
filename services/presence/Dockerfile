@@ -5,6 +5,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
+COPY proto ./proto
 COPY services/presence ./services/presence
 COPY services/shared ./services/shared
 RUN CGO_ENABLED=0 go build -o /out/knot-presence ./services/presence/cmd/knot-presence

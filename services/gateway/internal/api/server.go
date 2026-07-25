@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	knotv1 "github.com/yaroslavfairfieldd/knot/proto/gen/go/knot/v1"
+	"github.com/yaroslavfairfieldd/knot/services/shared/device"
 	"github.com/yaroslavfairfieldd/knot/services/shared/session"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -30,22 +31,45 @@ type Server struct {
 }
 
 type client struct {
-	connection *websocket.Conn
-	claims     session.Claims
-	outgoing   chan []byte
+	connection    *websocket.Conn
+	claims        session.Claims
+	device        *knotv1.DeviceDescriptor
+	outgoing      chan []byte
+	challenges    map[string]captchaChallenge
+	windowStarted time.Time
+	windowCount   int
 }
 
 type command struct {
-	Type            string `json:"type"`
-	ClientCommandID string `json:"client_command_id"`
-	ConversationID  string `json:"conversation_id"`
-	MessageID       string `json:"message_id"`
-	Text            string `json:"text"`
-	AttachmentID    string `json:"attachment_id"`
-	ReplyToID       string `json:"reply_to_id"`
-	ForwardedFromID string `json:"forwarded_from_id"`
-	Emoji           string `json:"emoji"`
-	Active          bool   `json:"active"`
+	Type                   string       `json:"type"`
+	ClientCommandID        string       `json:"client_command_id"`
+	ConversationID         string       `json:"conversation_id"`
+	MessageID              string       `json:"message_id"`
+	Text                   string       `json:"text"`
+	AttachmentID           string       `json:"attachment_id"`
+	ReplyToID              string       `json:"reply_to_id"`
+	ForwardedFromID        string       `json:"forwarded_from_id"`
+	Emoji                  string       `json:"emoji"`
+	Active                 bool         `json:"active"`
+	DeliveryMode           string       `json:"delivery_mode"`
+	TextEffect             string       `json:"text_effect"`
+	AuthorHideAfterSeconds int64        `json:"author_hide_after_seconds"`
+	Voice                  voiceCommand `json:"voice"`
+	CaptchaRequired        bool         `json:"captcha_required"`
+	CaptchaAnswer          int          `json:"captcha_answer"`
+}
+
+type voiceCommand struct {
+	OriginalAttachmentID string `json:"original_attachment_id"`
+	TaxedAttachmentID    string `json:"taxed_attachment_id"`
+	DurationMillis       int64  `json:"duration_millis"`
+	TaxLevel             string `json:"tax_level"`
+}
+
+type captchaChallenge struct {
+	left      int
+	right     int
+	expiresAt time.Time
 }
 
 func NewServer(manager *session.Manager, router knotv1.RouterServiceClient, delivery knotv1.DeliveryServiceClient, timeout time.Duration) (*Server, error) {
@@ -70,11 +94,28 @@ func (server *Server) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 		server.history(writer, request)
 	case request.Method == http.MethodGet && request.URL.Path == "/v1/wiretap":
 		server.wiretap(writer, request)
+	case request.Method == http.MethodGet && request.URL.Path == "/v1/dossier":
+		server.dossier(writer, request)
 	case request.Method == http.MethodGet && request.URL.Path == "/v1/socket":
 		server.socket(writer, request)
 	default:
 		writeJSON(writer, http.StatusNotFound, map[string]string{"error": "route not found"})
 	}
+}
+
+func (server *Server) dossier(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := server.authenticate(writer, request); !ok {
+		return
+	}
+	response, err := server.delivery.Dossier(request.Context(), &knotv1.DossierRequest{
+		Username: strings.TrimSpace(request.URL.Query().Get("username")),
+		Limit:    uint32Value(request.URL.Query().Get("limit"), 1000),
+	})
+	if err != nil {
+		writeRPCError(writer, err)
+		return
+	}
+	writeProto(writer, response)
 }
 
 func (server *Server) Publish(record *knotv1.WiretapRecord) {
@@ -153,11 +194,26 @@ func (server *Server) socket(writer http.ResponseWriter, request *http.Request) 
 		writeJSON(writer, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
 		return
 	}
+	if server.sessionConnections(claims.SessionID) >= 5 {
+		writeJSON(writer, http.StatusTooManyRequests, map[string]string{"error": "session connection limit exceeded"})
+		return
+	}
 	connection, err := server.upgrader.Upgrade(writer, request, nil)
 	if err != nil {
 		return
 	}
-	current := &client{connection: connection, claims: claims, outgoing: make(chan []byte, 64)}
+	descriptor := device.Parse(request.URL.Query().Get("device_id"), request.UserAgent())
+	if descriptor.ID == "" {
+		descriptor = device.Parse("installation_"+claims.SessionID, request.UserAgent())
+	}
+	current := &client{
+		connection:    connection,
+		claims:        claims,
+		device:        descriptor.Proto(),
+		outgoing:      make(chan []byte, 64),
+		challenges:    make(map[string]captchaChallenge),
+		windowStarted: time.Now().UTC(),
+	}
 	server.mutex.Lock()
 	server.clients[current] = struct{}{}
 	server.mutex.Unlock()
@@ -185,26 +241,46 @@ func (server *Server) handle(current *client, value command) {
 		server.error(current, value.ClientCommandID, "client_command_id is required")
 		return
 	}
+	if !current.allow(time.Now().UTC()) {
+		server.error(current, value.ClientCommandID, "command rate limit exceeded")
+		return
+	}
 	requestContext, cancel := context.WithTimeout(context.Background(), server.timeout)
 	defer cancel()
 	switch value.Type {
+	case "captcha_challenge":
+		server.challenge(current, value.ClientCommandID)
 	case "send":
+		if value.CaptchaRequired && !current.verifyChallenge(value.ClientCommandID, value.CaptchaAnswer, time.Now().UTC()) {
+			server.error(current, value.ClientCommandID, "CAPTCHA answer is invalid or expired")
+			return
+		}
 		kind := knotv1.MessageKind_MESSAGE_KIND_TEXT
 		if value.AttachmentID != "" {
 			kind = knotv1.MessageKind_MESSAGE_KIND_ATTACHMENT
 		}
 		response, err := server.router.RouteCommand(requestContext, &knotv1.RouteCommandRequest{
-			ClientCommandId: value.ClientCommandID,
-			ConversationId:  value.ConversationID,
-			AuthorUserId:    current.claims.UserID,
-			AuthorUsername:  current.claims.Username,
-			SessionId:       current.claims.SessionID,
-			SessionMode:     protoSessionMode(current.claims.Mode),
-			Kind:            kind,
-			Text:            value.Text,
-			AttachmentId:    value.AttachmentID,
-			ReplyToId:       value.ReplyToID,
-			ForwardedFromId: value.ForwardedFromID,
+			ClientCommandId:        value.ClientCommandID,
+			ConversationId:         value.ConversationID,
+			AuthorUserId:           current.claims.UserID,
+			AuthorUsername:         current.claims.Username,
+			SessionId:              current.claims.SessionID,
+			SessionMode:            protoSessionMode(current.claims.Mode),
+			Kind:                   kind,
+			Text:                   value.Text,
+			AttachmentId:           value.AttachmentID,
+			ReplyToId:              value.ReplyToID,
+			ForwardedFromId:        value.ForwardedFromID,
+			DeliveryMode:           deliveryMode(value.DeliveryMode),
+			TextEffect:             textEffect(value.TextEffect),
+			AuthorHideAfterSeconds: value.AuthorHideAfterSeconds,
+			Device:                 current.device,
+			Voice: &knotv1.VoiceMetadata{
+				OriginalAttachmentId: value.Voice.OriginalAttachmentID,
+				TaxedAttachmentId:    value.Voice.TaxedAttachmentID,
+				DurationMillis:       value.Voice.DurationMillis,
+				TaxLevel:             value.Voice.TaxLevel,
+			},
 		})
 		if err != nil {
 			server.rpcError(current, value.ClientCommandID, err)
@@ -219,6 +295,7 @@ func (server *Server) handle(current *client, value command) {
 			ActorUsername:        current.claims.Username,
 			SessionId:            current.claims.SessionID,
 			SessionMode:          protoSessionMode(current.claims.Mode),
+			Device:               current.device,
 			OccurredAtUnixMillis: time.Now().UTC().UnixMilli(),
 		}
 		switch value.Type {
@@ -244,6 +321,49 @@ func (server *Server) handle(current *client, value command) {
 	default:
 		server.error(current, value.ClientCommandID, "unknown command")
 	}
+}
+
+func (server *Server) sessionConnections(sessionID string) int {
+	server.mutex.RLock()
+	defer server.mutex.RUnlock()
+	count := 0
+	for current := range server.clients {
+		if current.claims.SessionID == sessionID {
+			count++
+		}
+	}
+	return count
+}
+
+func (server *Server) challenge(current *client, commandID string) {
+	hash := uint64(1469598103934665603)
+	for _, value := range []byte(current.claims.SessionID + commandID) {
+		hash ^= uint64(value)
+		hash *= 1099511628211
+	}
+	left := int(hash%9) + 1
+	right := int((hash/11)%9) + 1
+	current.challenges[commandID] = captchaChallenge{left: left, right: right, expiresAt: time.Now().UTC().Add(time.Minute)}
+	server.enqueue(current, mustJSON(map[string]any{
+		"type":              "captcha",
+		"client_command_id": commandID,
+		"question":          strconv.Itoa(left) + " + " + strconv.Itoa(right),
+	}))
+}
+
+func (current *client) verifyChallenge(commandID string, answer int, now time.Time) bool {
+	challenge, exists := current.challenges[commandID]
+	delete(current.challenges, commandID)
+	return exists && challenge.expiresAt.After(now) && challenge.left+challenge.right == answer
+}
+
+func (current *client) allow(now time.Time) bool {
+	if now.Sub(current.windowStarted) >= 10*time.Second {
+		current.windowStarted = now
+		current.windowCount = 0
+	}
+	current.windowCount++
+	return current.windowCount <= 30
 }
 
 func (server *Server) writeLoop(current *client) {
@@ -393,5 +513,23 @@ func eventKind(value string) knotv1.MessageEventKind {
 		return knotv1.MessageEventKind_MESSAGE_EVENT_KIND_RECEIPT
 	default:
 		return knotv1.MessageEventKind_MESSAGE_EVENT_KIND_UNSPECIFIED
+	}
+}
+
+func deliveryMode(value string) knotv1.DeliveryMode {
+	if strings.EqualFold(value, "unreliable") {
+		return knotv1.DeliveryMode_DELIVERY_MODE_UNRELIABLE
+	}
+	return knotv1.DeliveryMode_DELIVERY_MODE_NORMAL
+}
+
+func textEffect(value string) knotv1.TextEffect {
+	switch strings.ToLower(value) {
+	case "bureaucratic":
+		return knotv1.TextEffect_TEXT_EFFECT_BUREAUCRATIC
+	case "caesar3":
+		return knotv1.TextEffect_TEXT_EFFECT_CAESAR3
+	default:
+		return knotv1.TextEffect_TEXT_EFFECT_NONE
 	}
 }

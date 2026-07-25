@@ -5,6 +5,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
+COPY proto ./proto
 COPY services/api ./services/api
 COPY services/shared ./services/shared
 RUN CGO_ENABLED=0 go build -o /out/knot-api ./services/api/cmd/knot-api

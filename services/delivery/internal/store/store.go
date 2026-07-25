@@ -29,5 +29,6 @@ type Store interface {
 	ApplyEvent(context.Context, *knotv1.ApplyEventRequest) (*knotv1.Message, bool, error)
 	History(context.Context, string, string, uint64, int) ([]*knotv1.Message, uint64, error)
 	Wiretap(context.Context, WiretapFilter) ([]*knotv1.WiretapRecord, uint64, error)
+	Dossier(context.Context, string, int) ([]*knotv1.WiretapRecord, []*knotv1.Message, []*knotv1.Achievement, bool, error)
 	Ping(context.Context) error
 }

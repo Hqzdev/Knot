@@ -14,6 +14,7 @@ service DeliveryService {
   rpc ApplyEvent(ApplyEventRequest) returns (ApplyEventResponse);
   rpc History(HistoryRequest) returns (HistoryResponse);
   rpc Wiretap(WiretapRequest) returns (WiretapResponse);
+  rpc Dossier(DossierRequest) returns (DossierResponse);
 }
 
 enum SessionMode {
@@ -29,6 +30,7 @@ enum ConversationKind {
   CONVERSATION_KIND_GROUP = 2;
   CONVERSATION_KIND_WALL = 3;
   CONVERSATION_KIND_ROULETTE = 4;
+  CONVERSATION_KIND_BURNER = 5;
 }
 
 enum MessageKind {
@@ -45,6 +47,19 @@ enum MessageEventKind {
   MESSAGE_EVENT_KIND_DELETE = 3;
   MESSAGE_EVENT_KIND_REACTION = 4;
   MESSAGE_EVENT_KIND_RECEIPT = 5;
+}
+
+enum DeliveryMode {
+  DELIVERY_MODE_UNSPECIFIED = 0;
+  DELIVERY_MODE_NORMAL = 1;
+  DELIVERY_MODE_UNRELIABLE = 2;
+}
+
+enum TextEffect {
+  TEXT_EFFECT_UNSPECIFIED = 0;
+  TEXT_EFFECT_NONE = 1;
+  TEXT_EFFECT_BUREAUCRATIC = 2;
+  TEXT_EFFECT_CAESAR3 = 3;
 }
 
 message AuthorizeConnectionRequest {
@@ -68,6 +83,11 @@ message RouteCommandRequest {
   string attachment_id = 9;
   string reply_to_id = 10;
   string forwarded_from_id = 11;
+  DeliveryMode delivery_mode = 12;
+  TextEffect text_effect = 13;
+  int64 author_hide_after_seconds = 14;
+  DeviceDescriptor device = 15;
+  VoiceMetadata voice = 16;
 }
 
 message RouteCommandResponse {
@@ -84,6 +104,37 @@ message RouteHop {
 message Reaction {
   string emoji = 1;
   repeated string usernames = 2;
+}
+
+message DeviceDescriptor {
+  string device_id = 1;
+  string user_agent = 2;
+  string browser = 3;
+  string os = 4;
+  string form_factor = 5;
+}
+
+message ReadReceipt {
+  string user_id = 1;
+  string username = 2;
+  string session_id = 3;
+  SessionMode session_mode = 4;
+  DeviceDescriptor device = 5;
+  int64 read_at_unix_millis = 6;
+}
+
+message ForwardHop {
+  string message_id = 1;
+  string conversation_id = 2;
+  string author_username = 3;
+  int64 occurred_at_unix_millis = 4;
+}
+
+message VoiceMetadata {
+  string original_attachment_id = 1;
+  string taxed_attachment_id = 2;
+  int64 duration_millis = 3;
+  string tax_level = 4;
 }
 
 message Message {
@@ -112,6 +163,16 @@ message Message {
   int64 read_at_unix_millis = 23;
   repeated Reaction reactions = 24;
   repeated RouteHop route = 25;
+  repeated ReadReceipt read_receipts = 26;
+  repeated ForwardHop forward_chain = 27;
+  string requested_conversation_id = 28;
+  DeliveryMode delivery_mode = 29;
+  TextEffect text_effect = 30;
+  string current_source_text = 31;
+  int64 author_hide_at_unix_millis = 32;
+  bool author_projection_hidden = 33;
+  VoiceMetadata voice = 34;
+  DeviceDescriptor author_device = 35;
 }
 
 message AppendRequest {
@@ -135,6 +196,7 @@ message ApplyEventRequest {
   string emoji = 9;
   bool active = 10;
   int64 occurred_at_unix_millis = 11;
+  DeviceDescriptor device = 12;
 }
 
 message ApplyEventResponse {
@@ -177,9 +239,32 @@ message WiretapRecord {
   string emoji = 10;
   bool active = 11;
   int64 occurred_at_unix_millis = 12;
+  DeviceDescriptor device = 13;
 }
 
 message WiretapResponse {
   repeated WiretapRecord records = 1;
   uint64 next_sequence = 2;
+}
+
+message Achievement {
+  string id = 1;
+  string username = 2;
+  string kind = 3;
+  string title = 4;
+  string evidence_message_id = 5;
+  int64 unlocked_at_unix_millis = 6;
+}
+
+message DossierRequest {
+  string username = 1;
+  uint32 limit = 2;
+}
+
+message DossierResponse {
+  string username = 1;
+  repeated WiretapRecord records = 2;
+  repeated Message messages = 3;
+  repeated Achievement achievements = 4;
+  bool truncated = 5;
 }

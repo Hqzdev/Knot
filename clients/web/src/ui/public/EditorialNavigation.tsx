@@ -1,3 +1,5 @@
+import { getPublicArticlePath, publicSections } from "./PublicContentCatalog";
+
 type NavigationLink = {
   label: string;
   href: string;
@@ -14,130 +16,28 @@ type NavigationItem = {
 };
 
 const navigationItems: NavigationItem[] = [
-  {
-    label: "Wiretap",
-    groups: [
-      {
-        label: "Explore Wiretap",
-        links: [
-          { label: "Global feed ↗", href: "/login" },
-          { label: "Deleted originals", href: "#wiretap" },
-          { label: "Live drafts", href: "#stories" },
-        ],
-      },
-      {
-        label: "Observation tools",
-        links: [
-          { label: "Route traces", href: "#product" },
-          { label: "Active watchers", href: "#product" },
-          { label: "Audit filters", href: "#wiretap" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Product",
-    groups: [
-      {
-        label: "Explore Product",
-        links: [
-          { label: "Chats ↗", href: "/login" },
-          { label: "The Wall", href: "/login" },
-          { label: "Roulette", href: "/login" },
-        ],
-      },
-      {
-        label: "Resources",
-        links: [
-          { label: "Plaintext files", href: "#product" },
-          { label: "Reactions", href: "#product" },
-          { label: "Receipts", href: "#product" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "How it leaks",
-    groups: [
-      {
-        label: "Exposure model",
-        links: [
-          { label: "Plain HTTP and WS", href: "#product" },
-          { label: "Open local storage", href: "#wiretap" },
-          { label: "Permanent history", href: "#stories" },
-        ],
-      },
-      {
-        label: "Server access",
-        links: [
-          { label: "Public Wiretap", href: "#wiretap" },
-          { label: "Live draft relay", href: "#stories" },
-          { label: "Account impersonation", href: "/login" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Research",
-    groups: [
-      {
-        label: "Explore Research",
-        links: [
-          { label: "Exposure Index", href: "#wiretap" },
-          { label: "Watcher Studies", href: "#stories" },
-          { label: "Retention Lab", href: "#product" },
-        ],
-      },
-      {
-        label: "Latest findings",
-        links: [
-          { label: "Privacy score 0/100", href: "#company" },
-          { label: "Tombstone behavior", href: "#wiretap" },
-          { label: "Draft visibility", href: "#stories" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Company",
-    groups: [
-      {
-        label: "About Knot",
-        links: [
-          { label: "Company", href: "#company" },
-          { label: "Unsecure charter", href: "#company" },
-          { label: "Warnings", href: "#company" },
-        ],
-      },
-      {
-        label: "Access",
-        links: [
-          { label: "Password login", href: "/login" },
-          { label: "Steal an account", href: "/login" },
-          { label: "Enter as guest", href: "/login" },
-        ],
-      },
-    ],
-  },
+  ...publicSections.map((section) => ({
+    label: section.label,
+    groups: section.groups.map((group) => ({
+      label: group.label,
+      links: group.articles.map((article) => ({
+        label: article.label,
+        href: getPublicArticlePath(section.slug, article.slug),
+      })),
+    })),
+  })),
 ];
 
-const loginItem: NavigationItem = {
-  label: "Log in",
+const exploreItem: NavigationItem = {
+  label: "Explore Knot",
   groups: [
     {
-      label: "Choose an identity",
+      label: "Explore product",
       links: [
-        { label: "Password Login", href: "/login" },
-        { label: "Steal an Account", href: "/login" },
-        { label: "Enter as Guest", href: "/login" },
-      ],
-    },
-    {
-      label: "Before entering",
-      links: [
-        { label: "Accept the risk", href: "/login" },
-        { label: "Read the warnings", href: "#company" },
-        { label: "Privacy score 0/100", href: "#company" },
+        { label: "Chats", href: "/product/chats" },
+        { label: "Wiretap", href: "/wiretap/global-feed" },
+        { label: "The Wall", href: "/product/the-wall" },
+        { label: "Roulette", href: "/product/roulette" },
       ],
     },
   ],
@@ -151,8 +51,21 @@ export function EditorialNavigation() {
         <div className="editorial-links">
           {navigationItems.map((item) => <EditorialNavigationItem item={item} key={item.label} />)}
         </div>
+        <details className="editorial-mobile-menu">
+          <summary>Menu</summary>
+          <div className="editorial-mobile-panel">
+            {navigationItems.map((item) => (
+              <section key={item.label}>
+                <h2>{item.label}</h2>
+                {item.groups.flatMap((group) => group.links).map((link) => (
+                  <a href={link.href} key={link.href}>{link.label}</a>
+                ))}
+              </section>
+            ))}
+          </div>
+        </details>
         <div className="editorial-actions">
-          <EditorialNavigationItem item={loginItem} login />
+          <EditorialNavigationItem action item={exploreItem} />
           <a className="editorial-primary" href="/login">Open Knot ↗</a>
         </div>
       </nav>
@@ -160,10 +73,13 @@ export function EditorialNavigation() {
   );
 }
 
-function EditorialNavigationItem({ item, login = false }: Readonly<{ item: NavigationItem; login?: boolean }>) {
+function EditorialNavigationItem({ action = false, item }: Readonly<{ action?: boolean; item: NavigationItem }>) {
   return (
-    <div className={`editorial-nav-item${login ? " editorial-login" : ""}`}>
-      <button aria-haspopup="true" type="button">{item.label}{login ? " ⌄" : ""}</button>
+    <div className={`editorial-nav-item${action ? " editorial-action-menu" : ""}`}>
+      <button aria-haspopup="true" aria-label={item.label} type="button">
+        {item.label}
+        {action && <span className="editorial-disclosure" aria-hidden="true">⌄</span>}
+      </button>
       <div className="editorial-mega">
         <div className="editorial-mega-content">
           {item.groups.map((group) => (

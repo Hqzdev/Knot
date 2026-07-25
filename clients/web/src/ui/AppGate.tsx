@@ -6,7 +6,7 @@ import { ControlRoom } from "@/ui/messenger/ControlRoom";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export function AppGate({ target }: { target: "auth" | "app" }) {
+export function AppGate({ target, initialAuthMode = "login" }: { target: "auth" | "app"; initialAuthMode?: "login" | "register" }) {
   const { state } = useKnot();
   const router = useRouter();
   const destination = state.phase === "authenticated" ? "/app" : "/login";
@@ -23,7 +23,7 @@ export function AppGate({ target }: { target: "auth" | "app" }) {
     return <ControlRoom />;
   }
   if (target === "auth" && state.phase === "anonymous") {
-    return <AuthPage />;
+    return <AuthPage initialMode={initialAuthMode} />;
   }
   return <main className="loading-screen"><p>REDIRECTING OBSERVER</p></main>;
 }

@@ -26,6 +26,7 @@ const initialServerState: AppState = {
   roulette: "idle",
   search: "",
   connected: false,
+  maximumSecurity: false,
 };
 
 export function ApplicationProvider({ children }: { children: ReactNode }) {

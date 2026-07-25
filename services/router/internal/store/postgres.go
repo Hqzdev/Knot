@@ -48,6 +48,7 @@ func (directory *PostgresDirectory) Conversation(ctx context.Context, conversati
 		ctx,
 		`SELECT id, kind FROM conversations
 		 WHERE id = $1
+		   AND (expires_at IS NULL OR expires_at > NOW())
 		   AND (kind = 'wall' OR EXISTS(
 		       SELECT 1 FROM conversation_members WHERE conversation_id = conversations.id AND user_id = $2
 		   ))`,
@@ -86,6 +87,45 @@ func (directory *PostgresDirectory) Conversation(ctx context.Context, conversati
 	return conversation, rows.Err()
 }
 
+func (directory *PostgresDirectory) Alternatives(ctx context.Context, userID string, excludedID string) ([]Conversation, error) {
+	rows, err := directory.pool.Query(
+		ctx,
+		`SELECT conversations.id
+		 FROM conversations
+		 WHERE conversations.id <> $1
+		   AND conversations.kind IN ('direct', 'group')
+		   AND (conversations.expires_at IS NULL OR conversations.expires_at > NOW())
+		   AND EXISTS(
+		       SELECT 1 FROM conversation_members
+		       WHERE conversation_id = conversations.id AND user_id = $2
+		   )
+		   AND NOT EXISTS(
+		       SELECT 1 FROM conversation_members
+		       WHERE conversation_id = conversations.id AND user_id = 'usr_knot_support'
+		   )
+		 ORDER BY conversations.id`,
+		excludedID,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	values := make([]Conversation, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		conversation, err := directory.Conversation(ctx, id, userID)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, conversation)
+	}
+	return values, rows.Err()
+}
+
 func (directory *PostgresDirectory) Ping(ctx context.Context) error {
 	return directory.pool.Ping(ctx)
 }
@@ -100,6 +140,8 @@ func conversationKind(value string) knotv1.ConversationKind {
 		return knotv1.ConversationKind_CONVERSATION_KIND_WALL
 	case "roulette":
 		return knotv1.ConversationKind_CONVERSATION_KIND_ROULETTE
+	case "burner":
+		return knotv1.ConversationKind_CONVERSATION_KIND_BURNER
 	default:
 		return knotv1.ConversationKind_CONVERSATION_KIND_UNSPECIFIED
 	}

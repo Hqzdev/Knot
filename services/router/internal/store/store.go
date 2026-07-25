@@ -23,5 +23,6 @@ type Conversation struct {
 type Directory interface {
 	User(context.Context, string, string) (bool, error)
 	Conversation(context.Context, string, string) (Conversation, error)
+	Alternatives(context.Context, string, string) ([]Conversation, error)
 	Ping(context.Context) error
 }

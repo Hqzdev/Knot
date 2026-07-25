@@ -1,10 +1,12 @@
 import type { AppState, Message, Session, WiretapRecord } from "@/domain/models";
 
-const sessionKey = "knot_unsecure_session";
-const cacheKey = "knot_unsecure_message_cache";
-const outboxKey = "knot_unsecure_outbox";
+const sessionKey = "knot_unsecure_session_v2";
+const cacheKey = "knot_unsecure_message_cache_v2";
+const outboxKey = "knot_unsecure_outbox_v2";
 const riskKey = "knot_unsecure_risk_accepted";
 const savedKey = "knot_unsecure_saved_messages";
+const deviceKey = "knot_unsecure_device_id";
+const securityKey = "knot_unsecure_maximum_security";
 
 interface CachedState {
   messages: Record<string, Message[]>;
@@ -17,6 +19,19 @@ export interface OutboxCommand {
 }
 
 export class PlainRepository {
+  deviceId(): string {
+    if (!this.available()) {
+      return "server-render";
+    }
+    const current = localStorage.getItem(deviceKey);
+    if (current) {
+      return current;
+    }
+    const value = globalThis.crypto.randomUUID();
+    localStorage.setItem(deviceKey, value);
+    return value;
+  }
+
   loadSession(): Session | undefined {
     return this.read<Session>(sessionKey);
   }
@@ -47,6 +62,21 @@ export class PlainRepository {
       return;
     }
     localStorage.setItem(riskKey, "yes");
+  }
+
+  maximumSecurity(): boolean {
+    return this.available() && localStorage.getItem(securityKey) === "yes";
+  }
+
+  setMaximumSecurity(active: boolean): void {
+    if (!this.available()) {
+      return;
+    }
+    if (active) {
+      localStorage.setItem(securityKey, "yes");
+      return;
+    }
+    localStorage.removeItem(securityKey);
   }
 
   loadCache(): CachedState {

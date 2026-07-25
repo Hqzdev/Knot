@@ -1,6 +1,9 @@
 package api
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/yaroslavfairfieldd/knot/services/api/internal/ratelimit"
 	"github.com/yaroslavfairfieldd/knot/services/api/internal/store"
+	"github.com/yaroslavfairfieldd/knot/services/shared/device"
 	"github.com/yaroslavfairfieldd/knot/services/shared/session"
 )
 
@@ -34,6 +38,7 @@ type authResponse struct {
 	User         store.User   `json:"user"`
 	SessionID    string       `json:"session_id"`
 	Mode         session.Mode `json:"mode"`
+	Device       any          `json:"device"`
 }
 
 type registerRequest struct {
@@ -68,6 +73,10 @@ type membersRequest struct {
 type rouletteRequest struct {
 	LeftUserID  string `json:"left_user_id"`
 	RightUserID string `json:"right_user_id"`
+}
+
+type burnerRequest struct {
+	SourceConversationID string `json:"source_conversation_id"`
 }
 
 func NewServer(messageStore store.Store, manager *session.Manager, limiter ratelimit.Limiter, internalToken string) (*Server, error) {
@@ -110,6 +119,8 @@ func (server *Server) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 		server.createDirect(writer, request)
 	case request.Method == http.MethodPost && request.URL.Path == "/v1/conversations/group":
 		server.createGroup(writer, request)
+	case request.Method == http.MethodPost && request.URL.Path == "/v1/conversations/burner":
+		server.createBurner(writer, request)
 	case strings.HasPrefix(request.URL.Path, "/v1/conversations/"):
 		server.conversationRoute(writer, request)
 	case request.Method == http.MethodGet && request.URL.Path == "/v1/contacts":
@@ -251,9 +262,16 @@ func (server *Server) refresh(writer http.ResponseWriter, request *http.Request)
 		writeError(writer, http.StatusInternalServerError, "session refresh failed")
 		return
 	}
+	descriptor := device.Parse(request.Header.Get("X-Knot-Device-ID"), request.UserAgent())
 	user, storedSession, err := server.store.RotateSession(request.Context(), currentHash, store.Session{
-		TokenHash: replacementHash,
-		ExpiresAt: server.now().UTC().Add(30 * 24 * time.Hour),
+		TokenHash:  replacementHash,
+		DeviceID:   descriptor.ID,
+		UserAgent:  descriptor.UserAgent,
+		Browser:    descriptor.Browser,
+		OS:         descriptor.OS,
+		FormFactor: descriptor.FormFactor,
+		ExpiresAt:  server.now().UTC().Add(30 * 24 * time.Hour),
+		LastSeen:   server.now().UTC(),
 	})
 	if err != nil {
 		writeError(writer, http.StatusUnauthorized, "invalid session")
@@ -265,7 +283,12 @@ func (server *Server) refresh(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 	writeJSON(writer, http.StatusOK, authResponse{
-		AccessToken: accessToken, RefreshToken: refreshToken, User: user, SessionID: storedSession.ID, Mode: storedSession.Mode,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User:         user,
+		SessionID:    storedSession.ID,
+		Mode:         storedSession.Mode,
+		Device:       device.Parse(storedSession.DeviceID, storedSession.UserAgent).Proto(),
 	})
 }
 
@@ -418,6 +441,42 @@ func (server *Server) createGroup(writer http.ResponseWriter, request *http.Requ
 	writeJSON(writer, http.StatusCreated, conversation)
 }
 
+func (server *Server) createBurner(writer http.ResponseWriter, request *http.Request) {
+	claims, ok := server.authenticate(writer, request)
+	if !ok {
+		return
+	}
+	var input burnerRequest
+	if !decodeJSON(writer, request, &input) {
+		return
+	}
+	if strings.TrimSpace(input.SourceConversationID) == "" {
+		writeError(writer, http.StatusBadRequest, "Burner source is required")
+		return
+	}
+	identifier, err := session.NewID()
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, "Burner creation failed")
+		return
+	}
+	conversation, err := server.store.CreateBurner(
+		request.Context(),
+		claims.UserID,
+		strings.TrimSpace(input.SourceConversationID),
+		"burner_"+identifier,
+		server.now().UTC().Add(time.Minute),
+	)
+	if errors.Is(err, store.ErrConversation) {
+		writeError(writer, http.StatusBadRequest, "Burner source is unavailable")
+		return
+	}
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, "Burner creation failed")
+		return
+	}
+	writeJSON(writer, http.StatusCreated, conversation)
+}
+
 func (server *Server) conversationRoute(writer http.ResponseWriter, request *http.Request) {
 	claims, ok := server.authenticate(writer, request)
 	if !ok {
@@ -536,10 +595,10 @@ func (server *Server) allow(writer http.ResponseWriter, request *http.Request) b
 	window := time.Minute
 	scope := "write"
 	if strings.HasPrefix(request.URL.Path, "/v1/auth/") {
-		limit = 30
+		limit = 10
 		scope = "auth"
 	}
-	key := scope + ":" + clientAddress(request)
+	key := scope + ":" + server.networkRateKey(request)
 	if token := session.Bearer(request.Header.Get("Authorization")); token != "" {
 		if claims, err := server.sessions.Verify(token); err == nil {
 			key = scope + ":" + claims.SessionID
@@ -556,6 +615,13 @@ func (server *Server) allow(writer http.ResponseWriter, request *http.Request) b
 		return false
 	}
 	return true
+}
+
+func (server *Server) networkRateKey(request *http.Request) string {
+	address := clientAddress(request)
+	mac := hmac.New(sha256.New, []byte(server.internalToken))
+	_, _ = mac.Write([]byte(address))
+	return hex.EncodeToString(mac.Sum(nil)[:12])
 }
 
 func clientAddress(request *http.Request) string {
@@ -580,8 +646,28 @@ func (server *Server) issue(writer http.ResponseWriter, request *http.Request, u
 		writeError(writer, http.StatusInternalServerError, "session creation failed")
 		return
 	}
+	if err := server.store.EnsureSupportConversation(request.Context(), user.ID); err != nil {
+		writeError(writer, http.StatusInternalServerError, "support channel creation failed")
+		return
+	}
+	descriptor := device.Parse(request.Header.Get("X-Knot-Device-ID"), request.UserAgent())
+	if descriptor.ID == "" {
+		descriptor = device.Parse("installation_"+sessionID, request.UserAgent())
+	}
+	now := server.now().UTC()
 	storedSession := store.Session{
-		ID: sessionID, UserID: user.ID, Mode: mode, TokenHash: tokenHash, ExpiresAt: server.now().UTC().Add(30 * 24 * time.Hour),
+		ID:         sessionID,
+		UserID:     user.ID,
+		Mode:       mode,
+		TokenHash:  tokenHash,
+		DeviceID:   descriptor.ID,
+		UserAgent:  descriptor.UserAgent,
+		Browser:    descriptor.Browser,
+		OS:         descriptor.OS,
+		FormFactor: descriptor.FormFactor,
+		FirstSeen:  now,
+		LastSeen:   now,
+		ExpiresAt:  now.Add(30 * 24 * time.Hour),
 	}
 	if err := server.store.CreateSession(request.Context(), storedSession); err != nil {
 		writeError(writer, http.StatusInternalServerError, "session creation failed")
@@ -592,7 +678,14 @@ func (server *Server) issue(writer http.ResponseWriter, request *http.Request, u
 		writeError(writer, http.StatusInternalServerError, "session creation failed")
 		return
 	}
-	writeJSON(writer, http.StatusOK, authResponse{AccessToken: accessToken, RefreshToken: refreshToken, User: user, SessionID: sessionID, Mode: mode})
+	writeJSON(writer, http.StatusOK, authResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User:         user,
+		SessionID:    sessionID,
+		Mode:         mode,
+		Device:       descriptor.Proto(),
+	})
 }
 
 func (server *Server) authenticate(writer http.ResponseWriter, request *http.Request) (session.Claims, bool) {

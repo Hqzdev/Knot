@@ -2,24 +2,33 @@
 
 import type { Section } from "@/domain/models";
 import { useKnot } from "@/ui/ApplicationProvider";
+import { ControlRoomIcon, type ControlRoomIconName } from "./ControlRoomIcon";
 
-const primary: { id: Section; short: string; label: string }[] = [
-  { id: "chats", short: "CH", label: "Chats" },
-  { id: "wiretap", short: "WT", label: "Wiretap" },
-  { id: "wall", short: "WL", label: "Wall" },
-  { id: "roulette", short: "RX", label: "Roulette" },
+const primary: { id: Section; icon: ControlRoomIconName; label: string }[] = [
+  { id: "chats", icon: "chat", label: "Chats" },
+  { id: "wiretap", icon: "wiretap", label: "Wiretap" },
+  { id: "wall", icon: "wall", label: "Wall" },
+  { id: "roulette", icon: "roulette", label: "Roulette" },
 ];
 
-const secondary: { id: Section; short: string; label: string }[] = [
-  { id: "contacts", short: "CT", label: "Contacts" },
-  { id: "saved", short: "SV", label: "Saved" },
+const secondary: { id: Section; icon: ControlRoomIconName; label: string }[] = [
+  { id: "contacts", icon: "contacts", label: "Contacts" },
+  { id: "saved", icon: "bookmark", label: "Saved" },
+  { id: "status", icon: "activity", label: "Status" },
 ];
 
 export function NavigationRail() {
   const { controller, state } = useKnot();
-  const item = ({ id, short, label }: { id: Section; short: string; label: string }, className = "") => (
-    <button className={`${className} ${state.section === id ? "active" : ""}`} key={id} onClick={() => controller.setSection(id)}>
-      <b>{short}</b><span>{label}</span>
+  const item = ({ id, icon, label }: { id: Section; icon: ControlRoomIconName; label: string }, className = "") => (
+    <button
+      aria-label={label}
+      aria-current={state.section === id ? "page" : undefined}
+      className={`${className} ${state.section === id ? "active" : ""}`}
+      key={id}
+      onClick={() => controller.setSection(id)}
+      title={label}
+    >
+      <ControlRoomIcon name={icon} /><span>{label}</span>
     </button>
   );
   return (

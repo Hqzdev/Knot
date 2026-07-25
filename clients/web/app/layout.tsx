@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import type { ReactNode } from "react";
 import { ApplicationProvider } from "@/ui/ApplicationProvider";
 import "@/ui/styles.css";
+import "@/ui/messenger.css";
 
 const inter = localFont({
   src: "../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",

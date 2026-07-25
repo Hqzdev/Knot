@@ -7,14 +7,14 @@ export function RoulettePane() {
   return (
     <section className="roulette-pane">
       <div className="roulette-radar"><span /><span /><span /><i /></div>
-      <p className="eyebrow">RANDOM EXPOSURE PROTOCOL</p>
+      <p className="eyebrow">Random exposure protocol</p>
       <h1>Roulette</h1>
       <p className="roulette-copy">
         Enter the queue. The server pairs you with a random waiting session and creates a permanent conversation.
         Self-matches are excluded. Regret is not.
       </p>
       <div className={`roulette-state ${state.roulette}`}>
-        <span>{state.roulette === "waiting" ? "SCANNING PUBLIC SESSIONS" : state.roulette === "matched" ? "MATCH CAPTURED" : "QUEUE STANDING BY"}</span>
+        <span>{state.roulette === "waiting" ? "Scanning public sessions" : state.roulette === "matched" ? "Match captured" : "Queue standing by"}</span>
         <div><i /><i /><i /><i /><i /></div>
       </div>
       {state.roulette === "waiting"

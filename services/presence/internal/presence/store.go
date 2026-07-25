@@ -6,10 +6,15 @@ import (
 )
 
 type Identity struct {
-	UserID    string `json:"user_id"`
-	Username  string `json:"username"`
-	SessionID string `json:"session_id"`
-	Mode      string `json:"mode"`
+	UserID     string `json:"user_id"`
+	Username   string `json:"username"`
+	SessionID  string `json:"session_id"`
+	Mode       string `json:"mode"`
+	DeviceID   string `json:"device_id"`
+	UserAgent  string `json:"user_agent"`
+	Browser    string `json:"browser"`
+	OS         string `json:"os"`
+	FormFactor string `json:"form_factor"`
 }
 
 type Viewer struct {

@@ -3,6 +3,8 @@ import type { Conversation, Session, User } from "@/domain/models";
 export class ApiClient {
   private token = "";
 
+  constructor(private readonly deviceId: () => string) {}
+
   setToken(token: string): void {
     this.token = token;
   }
@@ -47,6 +49,10 @@ export class ApiClient {
     return this.request("/api/v1/conversations/group", { method: "POST", body: { title, members } });
   }
 
+  createBurner(sourceConversationId: string): Promise<Conversation> {
+    return this.request("/api/v1/conversations/burner", { method: "POST", body: { source_conversation_id: sourceConversationId } });
+  }
+
   contacts(): Promise<User[]> {
     return this.request("/api/v1/contacts");
   }
@@ -67,6 +73,7 @@ export class ApiClient {
     if (options.authenticated !== false && this.token) {
       headers.Authorization = `Bearer ${this.token}`;
     }
+    headers["X-Knot-Device-ID"] = this.deviceId();
     const response = await fetch(path, {
       method: options.method ?? "GET",
       headers,

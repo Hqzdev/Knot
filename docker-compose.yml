@@ -230,6 +230,23 @@ services:
     restart: *service-restart
     logging: *service-logging
 
+  bot:
+    build:
+      context: .
+      dockerfile: services/bot/Dockerfile
+    depends_on:
+      router:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      KNOT_BOT_ADDRESS: :8088
+      KNOT_ROUTER_GRPC_TARGET: router:9091
+      KNOT_NATS_URL: nats://nats:4222
+      KNOT_INTERNAL_GRPC_TOKEN: ${KNOT_INTERNAL_GRPC_TOKEN:-development-only-grpc-token-change-before-deploying}
+    restart: *service-restart
+    logging: *service-logging
+
   presence:
     build:
       context: .
@@ -283,6 +300,7 @@ services:
       - presence
       - attachments
       - preview
+      - bot
     environment:
       KNOT_WEB_UPSTREAM: http://web-app:3000
       KNOT_API_UPSTREAM: http://api:8080
@@ -290,6 +308,7 @@ services:
       KNOT_PRESENCE_UPSTREAM: http://presence:8083
       KNOT_ATTACHMENTS_UPSTREAM: http://attachments:8082
       KNOT_PREVIEW_UPSTREAM: http://preview:8087
+      KNOT_BOT_UPSTREAM: http://bot:8088
     ports:
       - "${KNOT_BIND_ADDRESS:-0.0.0.0}:5173:8080"
     restart: *service-restart

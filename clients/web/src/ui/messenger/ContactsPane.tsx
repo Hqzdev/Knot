@@ -20,10 +20,10 @@ export function ContactsPane() {
   };
   return (
     <section className="directory-pane">
-      <header><p className="eyebrow">PUBLIC IDENTITY DIRECTORY</p><h1>Contacts</h1><p>Find an account, observe its profile, start a channel.</p></header>
-      <form onSubmit={search}><input required minLength={1} placeholder="Search username" value={query} onChange={(event) => setQuery(event.target.value)} /><button disabled={busy}>SCAN</button></form>
+      <header><p className="eyebrow">Public identity directory</p><h1>Contacts</h1><p>Find an account, observe its profile, start a channel.</p></header>
+      <form onSubmit={search}><input required minLength={1} placeholder="Search username" value={query} onChange={(event) => setQuery(event.target.value)} /><button disabled={busy}>Scan</button></form>
       <div className="contact-strip">
-        <span>SAVED CONTACTS</span>
+        <span>Saved contacts</span>
         {state.contacts.length === 0 && <p>No contacts retained.</p>}
         {state.contacts.map((user) => (
           <button key={user.id} onClick={() => setResults([user])}>@{user.username}</button>
@@ -34,11 +34,11 @@ export function ContactsPane() {
         {results.map((user) => (
           <article key={user.id}>
             <span>{user.username.slice(0, 2).toUpperCase()}</span>
-            <div><strong>{user.display_name}</strong><small>@{user.username} · {user.kind.toUpperCase()}</small></div>
+            <div><strong>{user.display_name}</strong><small>@{user.username} · {user.kind}</small></div>
             <div className="directory-actions">
-              <button onClick={() => void controller.createDirect(user.username)}>OPEN CHAT</button>
+              <button onClick={() => void controller.createDirect(user.username)}>Open chat</button>
               <button onClick={() => void controller.setContact(user.username, !state.contacts.some((contact) => contact.id === user.id))}>
-                {state.contacts.some((contact) => contact.id === user.id) ? "REMOVE" : "SAVE"}
+                {state.contacts.some((contact) => contact.id === user.id) ? "Remove" : "Save"}
               </button>
             </div>
           </article>

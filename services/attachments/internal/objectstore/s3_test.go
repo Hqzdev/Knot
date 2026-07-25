@@ -46,10 +46,10 @@ func TestPresignedUploadIsDeterministicAndBindsMetadata(t *testing.T) {
 	if parsed.Host != "downloads.example.com" || parsed.Path != "/knot-attachments/attachments/id" || query.Get("X-Amz-Algorithm") != algorithm || query.Get("X-Amz-Expires") != "900" || query.Get("X-Amz-Security-Token") != "session-token" || len(query.Get("X-Amz-Signature")) != 64 {
 		t.Fatalf("unexpected presigned URL: %s", first.URL)
 	}
-	if query.Get("X-Amz-SignedHeaders") != "content-length;host;x-amz-meta-sha256" {
+	if query.Get("X-Amz-SignedHeaders") != "content-disposition;content-length;host;x-amz-meta-sha256" {
 		t.Fatalf("unexpected signed headers: %s", query.Get("X-Amz-SignedHeaders"))
 	}
-	if first.Headers["Content-Length"] != "42" || first.Headers["X-Amz-Meta-Sha256"] != testSHA256 || !first.ExpiresAt.Equal(now.Add(15*time.Minute)) {
+	if first.Headers["Content-Disposition"] != "attachment" || first.Headers["Content-Length"] != "42" || first.Headers["X-Amz-Meta-Sha256"] != testSHA256 || !first.ExpiresAt.Equal(now.Add(15*time.Minute)) {
 		t.Fatalf("unexpected upload request: %#v", first)
 	}
 }

@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" role="img" aria-labelledby="title desc">
+  <title id="title">Knot message lifecycle</title>
+  <desc id="desc">A message moves from the browser outbox through Gateway, Router and Delivery into PostgreSQL before NATS and Gateway expose it as an acknowledgement, realtime message and Wiretap record.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#69717D"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="480" rx="24" fill="#0C0D0F"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <text x="48" y="58" fill="#F7F8FA" font-size="40" font-weight="720">Message lifecycle</text>
+    <text x="48" y="88" fill="#A6ADB7" font-size="20">One command becomes a participant view and a permanent audit record.</text>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <g transform="translate(44 126)">
+      <rect width="198" height="190" rx="16" fill="#17191D" stroke="#343940"/>
+      <text x="20" y="34" fill="#FF7B72" font-size="20" font-weight="700">01</text>
+      <text x="20" y="72" fill="#F7F8FA" font-size="24" font-weight="680">Compose</text>
+      <text x="20" y="104" fill="#A6ADB7" font-size="18">KnotController</text>
+      <text x="20" y="130" fill="#A6ADB7" font-size="18">creates command ID</text>
+      <rect x="20" y="148" width="158" height="26" rx="13" fill="#2A1617"/>
+      <text x="34" y="167" fill="#FF7B72" font-size="16">plain local outbox</text>
+    </g>
+    <g transform="translate(272 126)">
+      <rect width="198" height="190" rx="16" fill="#17191D" stroke="#343940"/>
+      <text x="20" y="34" fill="#FF7B72" font-size="20" font-weight="700">02</text>
+      <text x="20" y="72" fill="#F7F8FA" font-size="24" font-weight="680">Gateway</text>
+      <text x="20" y="104" fill="#A6ADB7" font-size="18">public WebSocket</text>
+      <text x="20" y="130" fill="#A6ADB7" font-size="18">session + device</text>
+      <rect x="20" y="148" width="158" height="26" rx="13" fill="#24272C"/>
+      <text x="42" y="167" fill="#A6ADB7" font-size="16">JSON command</text>
+    </g>
+    <g transform="translate(500 126)">
+      <rect width="198" height="190" rx="16" fill="#17191D" stroke="#343940"/>
+      <text x="20" y="34" fill="#FF7B72" font-size="20" font-weight="700">03</text>
+      <text x="20" y="72" fill="#F7F8FA" font-size="24" font-weight="680">Router</text>
+      <text x="20" y="104" fill="#A6ADB7" font-size="18">authorizes room</text>
+      <text x="20" y="130" fill="#A6ADB7" font-size="18">selects target</text>
+      <rect x="20" y="148" width="158" height="26" rx="13" fill="#24272C"/>
+      <text x="56" y="167" fill="#A6ADB7" font-size="16">gRPC route</text>
+    </g>
+    <g transform="translate(728 126)">
+      <rect width="198" height="190" rx="16" fill="#17191D" stroke="#343940"/>
+      <text x="20" y="34" fill="#FF7B72" font-size="20" font-weight="700">04</text>
+      <text x="20" y="72" fill="#F7F8FA" font-size="24" font-weight="680">Delivery</text>
+      <text x="20" y="104" fill="#A6ADB7" font-size="18">stores original</text>
+      <text x="20" y="130" fill="#A6ADB7" font-size="18">applies projection</text>
+      <rect x="20" y="148" width="158" height="26" rx="13" fill="#2A1617"/>
+      <text x="46" y="167" fill="#FF7B72" font-size="16">never forgotten</text>
+    </g>
+    <g transform="translate(956 126)">
+      <rect width="200" height="190" rx="16" fill="#17191D" stroke="#343940"/>
+      <text x="20" y="34" fill="#FF7B72" font-size="20" font-weight="700">05</text>
+      <text x="20" y="72" fill="#F7F8FA" font-size="24" font-weight="680">Expose</text>
+      <text x="20" y="104" fill="#A6ADB7" font-size="18">ack + message</text>
+      <text x="20" y="130" fill="#A6ADB7" font-size="18">route + Wiretap</text>
+      <rect x="20" y="148" width="160" height="26" rx="13" fill="#2A1617"/>
+      <text x="48" y="167" fill="#FF7B72" font-size="16">global record</text>
+    </g>
+  </g>
+  <g fill="none" stroke="#69717D" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M244 221H264"/>
+    <path d="M472 221H492"/>
+    <path d="M700 221H720"/>
+    <path d="M928 221H948"/>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <rect x="44" y="348" width="1112" height="88" rx="16" fill="#17191D" stroke="#343940"/>
+    <circle cx="78" cy="381" r="6" fill="#FF5D52"/>
+    <text x="96" y="388" fill="#F7F8FA" font-size="20" font-weight="650">PostgreSQL</text>
+    <text x="96" y="414" fill="#A6ADB7" font-size="18">message + original + events + route</text>
+    <circle cx="496" cy="381" r="6" fill="#FF5D52"/>
+    <text x="514" y="388" fill="#F7F8FA" font-size="20" font-weight="650">NATS</text>
+    <text x="514" y="414" fill="#A6ADB7" font-size="18">retained Wiretap transport</text>
+    <circle cx="822" cy="381" r="6" fill="#2CCB7F"/>
+    <text x="840" y="388" fill="#F7F8FA" font-size="20" font-weight="650">Browser catch-up</text>
+    <text x="840" y="414" fill="#A6ADB7" font-size="18">reconnect + replay pending commands</text>
+  </g>
+</svg>
